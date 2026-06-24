@@ -74,8 +74,8 @@ git clone https://github.com/xAyan55/helilink-panel.git
 cd panel
 
 # Set permissions
-chown -R www-data:www-data /var/www/panel
-chmod -R 755 /var/www/panel
+chown -R www-data:www-data /var/www/helilink-panel
+chmod -R 755 /var/www/helilink-panel
 
 # Install dependencies
 pnpm install
@@ -118,7 +118,7 @@ Copy `example.env` to `.env` and fill in the required values:
 | `SESSION_SECRET` | Yes | Random secret for session signing - use `openssl rand -hex 32` |
 
 > [!IMPORTANT]
-> `DATABASE_URL` must be an **absolute path** in production (e.g. `file:/var/www/panel/storage/dev.db`). Relative paths break when started from a different working directory (e.g. via systemd). This is not a suggestion. This is a warning -_-
+> `DATABASE_URL` must be an **absolute path** in production (e.g. `file:/var/www/helilink-panel/storage/dev.db`). Relative paths break when started from a different working directory (e.g. via systemd). This is not a suggestion. This is a warning -_-
 
 > [!IMPORTANT]
 > `URL` should be the actual IP or hostname the panel is accessible from. Setting it to `http://localhost` will prevent network access and cause CSP issues. Your browser will judge you -_-

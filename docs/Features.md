@@ -18,8 +18,8 @@ The installer is interactive. It walks you through database setup, admin account
 cd /var/www/
 git clone https://github.com/xAyan55/helilink-panel.git
 cd panel
-sudo chown -R www-data:www-data /var/www/panel
-sudo chmod -R 755 /var/www/panel
+sudo chown -R www-data:www-data /var/www/helilink-panel
+sudo chmod -R 755 /var/www/helilink-panel
 cp example.env .env
 # Edit .env - set PORT, URL, SESSION_SECRET, DATABASE_URL
 pnpm install
@@ -271,7 +271,7 @@ Prefix your table names with your addon slug to avoid collisions with other addo
 
 ### Installing an addon manually
 ```bash
-cd /var/www/panel/storage/addons/
+cd /var/www/helilink-panel/storage/addons/
 git clone https://github.com/you/your-addon.git your-addon
 cd your-addon
 pnpm install

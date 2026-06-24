@@ -1245,30 +1245,30 @@ SVCEOF
 phase_panel_clone() {
     mkdir -p /var/www
 
-    if [[ -d /var/www/panel ]]; then
+    if [[ -d /var/www/helilink-panel ]]; then
         echo "Panel already exists — overwriting files, keeping .env and db"
         local tmpdir; tmpdir=$(mktemp -d /tmp/al-panel-XXXXXX)
         git clone --depth 1 "${PANEL_REPO}" "$tmpdir" || die "Failed to clone panel"
 
         if command -v rsync &>/dev/null; then
             rsync -a --exclude='.env' --exclude='node_modules' \
-                  --exclude='storage' "$tmpdir/" /var/www/panel/
+                  --exclude='storage' "$tmpdir/" /var/www/helilink-panel/
         else
             find "$tmpdir" -mindepth 1 -maxdepth 1 \
                 ! -name '.env' ! -name 'node_modules' ! -name 'storage' \
-                -exec cp -r {} /var/www/panel/ \;
+                -exec cp -r {} /var/www/helilink-panel/ \;
         fi
         rm -rf "$tmpdir"
     else
         cd /var/www || die "Cannot access /var/www"
-        git clone --depth 1 "${PANEL_REPO}" panel || die "Failed to clone panel"
+        git clone --depth 1 "${PANEL_REPO}" helilink-panel || die "Failed to clone panel"
     fi
 
-    id www-data &>/dev/null && chown -R www-data:www-data /var/www/panel
-    chmod -R 755 /var/www/panel
+    id www-data &>/dev/null && chown -R www-data:www-data /var/www/helilink-panel
+    chmod -R 755 /var/www/helilink-panel
 
     if command -v python3 &>/dev/null; then
-        python3 - /var/www/panel/package.json <<'PYEOF'
+        python3 - /var/www/helilink-panel/package.json <<'PYEOF'
 import json, sys
 f = sys.argv[1]
 with open(f) as fh:
@@ -1282,17 +1282,17 @@ with open(f, "w") as fh:
 PYEOF
     fi
 
-    if [[ ! -f /var/www/panel/.env ]]; then
+    if [[ ! -f /var/www/helilink-panel/.env ]]; then
         local secret; secret=$(openssl rand -hex 32)
         local server_ip
         server_ip=$(hostname -I 2>/dev/null | awk '{print $1}') || server_ip="localhost"
         [[ -z "$server_ip" ]] && server_ip="localhost"
-        cat > /var/www/panel/.env <<ENVEOF
+        cat > /var/www/helilink-panel/.env <<ENVEOF
 NAME=${PANEL_NAME}
 NODE_ENV=production
 URL=http://${server_ip}:${PANEL_PORT}
 PORT=${PANEL_PORT}
-DATABASE_URL=file:/var/www/panel/storage/dev.db
+DATABASE_URL=file:/var/www/helilink-panel/storage/dev.db
 SESSION_SECRET=${secret}
 DISCORD_CLIENT_ID=""
 DISCORD_CLIENT_SECRET=""
@@ -1303,7 +1303,7 @@ ENVEOF
 }
 
 phase_panel_deps() {
-    cd /var/www/panel || die "Panel directory missing"
+    cd /var/www/helilink-panel || die "Panel directory missing"
 
     NODE_ENV=development "$PNPM" install --no-frozen-lockfile \
         --store-dir "$PNPM_STORE" \
@@ -1317,7 +1317,7 @@ phase_panel_deps() {
 }
 
 phase_panel_build() {
-    cd /var/www/panel || die "Panel directory missing"
+    cd /var/www/helilink-panel || die "Panel directory missing"
     "$PNPM" run migrate:deploy || die "Database migration failed"
     "$PNPM" run build || die "Panel build failed"
 }
@@ -1334,8 +1334,8 @@ After=network.target
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/var/www/panel
-EnvironmentFile=/var/www/panel/.env
+WorkingDirectory=/var/www/helilink-panel
+EnvironmentFile=/var/www/helilink-panel/.env
 ExecStart=${pnpm_bin} run start
 Restart=on-failure
 RestartSec=5
@@ -1370,7 +1370,7 @@ _process_addons() {
         done
     fi
 
-    local addons_dir="/var/www/panel/storage/addons"
+    local addons_dir="/var/www/helilink-panel/storage/addons"
     mkdir -p "$addons_dir"
 
     for addon_config in "${to_install[@]}"; do
@@ -1396,7 +1396,7 @@ _process_addons() {
         log "OK: $display_name addon done"
     done
 
-    cd /var/www/panel
+    cd /var/www/helilink-panel
     npx tailwindcss -i ./public/tw.css -o ./public/styles.css &>/dev/null || true
 }
 
@@ -1407,7 +1407,7 @@ tui_remove_panel() {
     systemctl stop    airlink-panel &>/dev/null || true
     systemctl disable airlink-panel &>/dev/null || true
     rm -f /etc/systemd/system/airlink-panel.service
-    rm -rf /var/www/panel
+    rm -rf /var/www/helilink-panel
     systemctl daemon-reload
 }
 
@@ -1605,7 +1605,7 @@ run_interactive() {
                 stty -echo 2>/dev/null || true
                 ;;
             5)
-                tui_confirm "Remove panel? This deletes /var/www/panel" && \
+                tui_confirm "Remove panel? This deletes /var/www/helilink-panel" && \
                     tui_run "Removing panel" tui_remove_panel
                 ;;
             6)
@@ -1700,7 +1700,7 @@ run_noninteractive() {
     if [[ "$mode" != "daemon" ]]; then
         printf "  ${C_YELLOW}${BOLD}IMPORTANT NOTE:${RESET}\n"
         printf "  To complete Discord OAuth setup, you must edit the environment config:\n"
-        printf "  ${BOLD}nano /var/www/panel/.env${RESET}\n"
+        printf "  ${BOLD}nano /var/www/helilink-panel/.env${RESET}\n"
         printf "  and fill in your Discord credentials:\n"
         printf "    - ${BOLD}DISCORD_CLIENT_ID${RESET}\n"
         printf "    - ${BOLD}DISCORD_CLIENT_SECRET${RESET}\n"
