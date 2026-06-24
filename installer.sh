@@ -19,16 +19,16 @@ set -uo pipefail
 
 readonly VERSION="3.2.0-Stable"
 readonly LOG="/tmp/airlink.log"
-readonly PANEL_REPO="https://github.com/Helilink/panel.git"
-readonly DAEMON_RELEASE_API="https://api.github.com/repos/helilink/daemon/releases/latest"
+readonly PANEL_REPO="https://github.com/xAyan55/helilink-panel.git"
+readonly DAEMON_RELEASE_API="https://api.github.com/repos/xAyan55/helilink-daemon/releases/latest"
 
 PNPM_REGISTRY="https://registry.npmjs.org"
 PNPM="pnpm"
 PNPM_STORE="/root/.pnpm-store"
 
 declare -a ADDONS=(
-    "Modrinth|https://github.com/helilink/addons.git|modrinth|modrinth"
-    "Parachute|https://github.com/helilink/addons.git|parachute|parachute"
+    "Modrinth|https://github.com/xAyan55/helilink-addons.git|modrinth|modrinth"
+    "Parachute|https://github.com/xAyan55/helilink-addons.git|parachute|parachute"
 )
 
 # =============================================================================

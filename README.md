@@ -7,7 +7,7 @@
 
 ![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)
 ![Prisma](https://img.shields.io/badge/Prisma-3982CE?style=for-the-badge&logo=Prisma&logoColor=white)
-[![License](https://img.shields.io/github/license/Helilink/panel)](https://github.com/Helilink/panel/blob/main/LICENSE)
+[![License](https://img.shields.io/github/license/Helilink/panel)](https://github.com/xAyan55/helilink-panel/blob/main/LICENSE)
 [![Discord](https://img.shields.io/discord/1302020587316707420)](https://discord.gg/ujXyxwwMHc)
 
 ---
@@ -52,7 +52,7 @@ For full documentation, visit **[helilink.xyz/docs/quick-start/](https://helilin
 
 ```bash
 sudo su
-bash <(curl -s https://raw.githubusercontent.com/helilink/panel/refs/heads/main/installer.sh)
+bash <(curl -s https://raw.githubusercontent.com/xAyan55/helilink-panel/refs/heads/main/installer.sh)
 ```
 
 This handles everything: Node.js, Docker, database, build, systemd service. Just sit back and watch the progress bar -_-
@@ -70,7 +70,7 @@ journalctl -u airlink-panel -f
 
 ```bash
 cd /var/www/
-git clone https://github.com/Helilink/panel.git
+git clone https://github.com/xAyan55/helilink-panel.git
 cd panel
 
 # Set permissions
@@ -190,7 +190,7 @@ Run `pnpm run lint` and `pnpm run typecheck` before submitting. If your PR break
 - Website: [helilink.xyz](https://helilink.xyz/)
 - Docs: [helilink.xyz/docs/quick-start](https://helilink.xyz/docs/quick-start/)
 - Discord: [discord.gg/ujXyxwwMHc](https://discord.gg/ujXyxwwMHc)
-- GitHub: [github.com/helilink/panel](https://github.com/helilink/panel)
+- GitHub: [github.com/xAyan55/helilink-panel](https://github.com/xAyan55/helilink-panel)
 
 ## License
 

@@ -4,7 +4,7 @@
   "description": "HeliLink panel, A simple-to-use game server management panel",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Helilink/panel"
+    "url": "https://github.com/xAyan55/helilink-panel"
   },
   "author": "Helilink",
   "license": "MIT",
