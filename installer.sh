@@ -1294,6 +1294,10 @@ URL=http://${server_ip}:${PANEL_PORT}
 PORT=${PANEL_PORT}
 DATABASE_URL=file:/var/www/panel/storage/dev.db
 SESSION_SECRET=${secret}
+DISCORD_CLIENT_ID=""
+DISCORD_CLIENT_SECRET=""
+DISCORD_REDIRECT_URI="http://${server_ip}:${PANEL_PORT}/auth/discord/callback"
+DISCORD_ADMIN_IDS=""
 ENVEOF
     fi
 }
@@ -1692,6 +1696,19 @@ run_noninteractive() {
     [[ "$mode" != "panel"  ]] && printf "  ${C_GRAY}Daemon:${RESET}  port %s\n" "$DAEMON_PORT"
     printf "  ${C_GRAY}Logs  :${RESET}  %s\n" "$LOG"
     printf "  ${C_GRAY}System:${RESET}  journalctl -u airlink-panel -f\n\n"
+
+    if [[ "$mode" != "daemon" ]]; then
+        printf "  ${C_YELLOW}${BOLD}IMPORTANT NOTE:${RESET}\n"
+        printf "  To complete Discord OAuth setup, you must edit the environment config:\n"
+        printf "  ${BOLD}nano /var/www/panel/.env${RESET}\n"
+        printf "  and fill in your Discord credentials:\n"
+        printf "    - ${BOLD}DISCORD_CLIENT_ID${RESET}\n"
+        printf "    - ${BOLD}DISCORD_CLIENT_SECRET${RESET}\n"
+        printf "    - ${BOLD}DISCORD_REDIRECT_URI${RESET} (must match your reverse proxy domain: e.g. https://free.apollohost.qzz.io/auth/discord/callback)\n"
+        printf "    - ${BOLD}DISCORD_ADMIN_IDS${RESET} (your Discord User ID)\n\n"
+        printf "  Then restart the panel service using:\n"
+        printf "  ${BOLD}systemctl restart airlink-panel${RESET}\n\n"
+    fi
 }
 
 # =============================================================================
