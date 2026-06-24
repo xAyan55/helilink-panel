@@ -3,7 +3,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { Module } from '../../handlers/moduleInit';
 import logger from '../../handlers/logger';
 import axios from 'axios';
-import { randomBytes } from 'crypto';
+import { randomBytes, createHmac } from 'crypto';
 
 declare module 'express-session' {
   interface SessionData {
@@ -16,6 +16,48 @@ declare module 'express-session' {
     };
     discordOAuthState?: string;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers — HMAC-signed compound state
+// ---------------------------------------------------------------------------
+// The OAuth state sent to Discord is:  randomHex.sessionId.hmacSignature
+// On callback we can extract the session ID even if the browser dropped
+// all cookies (common behind Cloudflare Tunnel cross-site redirects).
+// The HMAC prevents tampering so an attacker cannot forge a session ID.
+// ---------------------------------------------------------------------------
+
+function getHmacSecret(): string {
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) throw new Error('SESSION_SECRET is required');
+  return secret;
+}
+
+function buildSignedState(randomState: string, sessionId: string): string {
+  const payload = `${randomState}.${sessionId}`;
+  const sig = createHmac('sha256', getHmacSecret())
+    .update(payload)
+    .digest('hex');
+  return `${payload}.${sig}`;
+}
+
+function parseSignedState(
+  compound: string,
+): { randomState: string; sessionId: string } | null {
+  const parts = compound.split('.');
+  if (parts.length !== 3) return null;
+  const [randomState, sessionId, sig] = parts;
+  const expected = createHmac('sha256', getHmacSecret())
+    .update(`${randomState}.${sessionId}`)
+    .digest('hex');
+  // Constant-time comparison
+  if (sig.length !== expected.length) return null;
+  let mismatch = 0;
+  for (let i = 0; i < sig.length; i++) {
+    mismatch |= sig.charCodeAt(i) ^ expected.charCodeAt(i);
+  }
+  if (mismatch !== 0) return null;
+  return { randomState, sessionId };
 }
 
 const authServiceModule: Module = {
@@ -34,28 +76,26 @@ const authServiceModule: Module = {
     // ── GET /auth/discord ────────────────────────────────────────────────────
     router.get('/auth/discord', (req: Request, res: Response, next: NextFunction) => {
       try {
-        const state = randomBytes(16).toString('hex');
-        req.session.discordOAuthState = state;
+        const randomState = randomBytes(16).toString('hex');
+        req.session.discordOAuthState = randomState;
 
-        logger.info(`[OAuth Debug] === REDIRECT START ===`);
-        logger.info(`[OAuth Debug] Generated state: ${state}`);
-        logger.info(`[OAuth Debug] Session ID: ${req.sessionID}`);
-        logger.info(`[OAuth Debug] Session is new: ${!req.session.cookie.expires}`);
-        logger.info(`[OAuth Debug] Protocol: ${req.protocol}, Secure: ${req.secure}`);
-        logger.info(`[OAuth Debug] X-Forwarded-Proto: ${req.headers['x-forwarded-proto']}`);
-        logger.info(`[OAuth Debug] Cookie header present: ${!!req.headers.cookie}`);
-        logger.info(`[OAuth Debug] connect.sid in cookies: ${!!(req.headers.cookie && req.headers.cookie.includes('connect.sid'))}`);
+        logger.info(`[OAuth] Redirect: state=${randomState}, sid=${req.sessionID}`);
 
         const clientID = process.env.DISCORD_CLIENT_ID || '';
         const redirectURI = encodeURIComponent(process.env.DISCORD_REDIRECT_URI || '');
-        const authorizeUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientID}&redirect_uri=${redirectURI}&response_type=code&scope=identify+email&state=${state}`;
 
+        // Save session first, then build signed state with the confirmed session ID
         req.session.save((err) => {
           if (err) {
-            logger.error('[OAuth Debug] Session save FAILED before redirect:', err);
+            logger.error('[OAuth] Session save failed before redirect:', err);
             return next(err);
           }
-          logger.info(`[OAuth Debug] Session saved OK. Redirecting to Discord...`);
+
+          // Build compound state: randomHex.sessionId.hmac
+          const compoundState = buildSignedState(randomState, req.sessionID);
+          const authorizeUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientID}&redirect_uri=${redirectURI}&response_type=code&scope=identify+email&state=${compoundState}`;
+
+          logger.info(`[OAuth] Session saved. Redirecting to Discord...`);
           res.redirect(authorizeUrl);
         });
       } catch (err) {
@@ -66,27 +106,69 @@ const authServiceModule: Module = {
 
     // ── GET /auth/discord/callback ───────────────────────────────────────────
     router.get('/auth/discord/callback', async (req: Request, res: Response) => {
-      const { code, state } = req.query;
-      const sessionState = req.session.discordOAuthState;
+      const { code, state: compoundState } = req.query;
 
-      logger.info(`[OAuth Debug] === CALLBACK START ===`);
-      logger.info(`[OAuth Debug] Session ID: ${req.sessionID}`);
-      logger.info(`[OAuth Debug] Received state: ${state}`);
-      logger.info(`[OAuth Debug] Stored state: ${sessionState}`);
-      logger.info(`[OAuth Debug] State match: ${state === sessionState}`);
-      logger.info(`[OAuth Debug] Protocol: ${req.protocol}, Secure: ${req.secure}`);
-      logger.info(`[OAuth Debug] X-Forwarded-Proto: ${req.headers['x-forwarded-proto']}`);
-      logger.info(`[OAuth Debug] Cookie header present: ${!!req.headers.cookie}`);
-      logger.info(`[OAuth Debug] connect.sid in cookies: ${!!(req.headers.cookie && req.headers.cookie.includes('connect.sid'))}`);
-      logger.info(`[OAuth Debug] Session keys: ${Object.keys(req.session).join(', ')}`);
-
-      // Clear OAuth state from session immediately and save
-      delete req.session.discordOAuthState;
-      await new Promise<void>((resolve) => req.session.save(() => resolve()));
-
-      if (!state || state !== sessionState) {
-        logger.warn(`[OAuth Debug] STATE MISMATCH! Received: ${state}, Stored: ${sessionState}. Session ID: ${req.sessionID}`);
+      if (!compoundState || typeof compoundState !== 'string') {
+        logger.warn('[OAuth] Callback missing state parameter');
         return res.redirect('/login?err=invalid_state');
+      }
+
+      // 1. Verify HMAC signature and extract session ID + random state
+      const parsed = parseSignedState(compoundState);
+      if (!parsed) {
+        logger.warn('[OAuth] Callback state failed HMAC verification');
+        return res.redirect('/login?err=invalid_state');
+      }
+
+      const { randomState, sessionId } = parsed;
+      const hasCookies = !!(req.headers.cookie && req.headers.cookie.includes('connect.sid'));
+
+      logger.info(`[OAuth] Callback: hasCookies=${hasCookies}, currentSid=${req.sessionID}, originalSid=${sessionId}`);
+
+      // 2. Resolve the stored state — either from current session or from DB
+      let storedState: string | undefined;
+
+      if (hasCookies && req.sessionID === sessionId) {
+        // Fast path: cookies survived, same session
+        storedState = req.session.discordOAuthState;
+      } else {
+        // Fallback: cookies were lost (common behind Cloudflare Tunnel).
+        // Load the original session directly from the database.
+        logger.info(`[OAuth] Cookies lost — loading session ${sessionId} from DB`);
+        try {
+          const row = await prisma.session.findUnique({
+            where: { session_id: sessionId },
+          });
+          if (row) {
+            const sessionData = JSON.parse(row.data);
+            storedState = sessionData.discordOAuthState;
+          }
+        } catch (dbErr) {
+          logger.error('[OAuth] Failed to load session from DB:', dbErr);
+        }
+      }
+
+      // 3. Validate state
+      if (!storedState || storedState !== randomState) {
+        logger.warn(`[OAuth] State mismatch: received=${randomState}, stored=${storedState}`);
+        return res.redirect('/login?err=invalid_state');
+      }
+
+      // 4. Clean up: remove the used state from the original session in DB
+      try {
+        const row = await prisma.session.findUnique({
+          where: { session_id: sessionId },
+        });
+        if (row) {
+          const sessionData = JSON.parse(row.data);
+          delete sessionData.discordOAuthState;
+          await prisma.session.update({
+            where: { session_id: sessionId },
+            data: { data: JSON.stringify(sessionData) },
+          });
+        }
+      } catch {
+        // best effort cleanup
       }
 
       if (!code) {
@@ -94,7 +176,7 @@ const authServiceModule: Module = {
       }
 
       try {
-        // 1. Exchange authorization code for token
+        // 5. Exchange authorization code for token
         const tokenResponse = await axios.post(
           'https://discord.com/api/oauth2/token',
           new URLSearchParams({
@@ -113,7 +195,7 @@ const authServiceModule: Module = {
 
         const { access_token } = tokenResponse.data;
 
-        // 2. Fetch user information from Discord
+        // 6. Fetch user information from Discord
         const userResponse = await axios.get('https://discord.com/api/users/@me', {
           headers: {
             Authorization: `Bearer ${access_token}`,
@@ -127,12 +209,12 @@ const authServiceModule: Module = {
           return res.redirect('/login?err=invalid_discord_user');
         }
 
-        // 3. Find user by discord_id (sole identity source)
+        // 7. Find user by discord_id (sole identity source)
         let user = await prisma.users.findUnique({
           where: { discord_id: discordId },
         });
 
-        // 4. Dynamic Admin Assignment: check if user ID is in split array
+        // 8. Dynamic Admin Assignment: check if user ID is in split array
         const adminIds = (process.env.DISCORD_ADMIN_IDS || '')
           .split(',')
           .map(id => id.trim());
@@ -143,26 +225,24 @@ const authServiceModule: Module = {
           : `https://cdn.discordapp.com/embed/avatars/${Number(discordId) % 5}.png`;
 
         if (!user) {
-          // If the user does not exist, automatically register them
           const userEmail = email || `${username}@discord.local`;
 
           user = await prisma.users.create({
             data: {
               email: userEmail,
               username: username,
-              password: null, // password is left optional and null
+              password: null,
               discord_id: discordId,
               discord_username: username,
               discord_display_name: global_name || username,
               discord_avatar: discordAvatarUrl,
               discord_email: email || null,
-              avatar: discordAvatarUrl, // set in existing avatar field for global compat
+              avatar: discordAvatarUrl,
               isAdmin: isAdmin,
               description: global_name || 'HeliLink User',
             },
           });
         } else {
-          // User already exists, update Discord details and dynamic admin check
           user = await prisma.users.update({
             where: { id: user.id },
             data: {
@@ -170,13 +250,13 @@ const authServiceModule: Module = {
               discord_display_name: global_name || username,
               discord_avatar: discordAvatarUrl,
               discord_email: email || null,
-              avatar: discordAvatarUrl, // sync avatar field
-              isAdmin: isAdmin, // ensure admin privileges sync dynamically based on env vars
+              avatar: discordAvatarUrl,
+              isAdmin: isAdmin,
             },
           });
         }
 
-        // 5. Session security: regenerate session to prevent session fixation
+        // 9. Session security: regenerate session to prevent session fixation
         await new Promise<void>((resolve, reject) =>
           req.session.regenerate(err => (err ? reject(err) : resolve()))
         );
@@ -189,6 +269,11 @@ const authServiceModule: Module = {
           username:    user.username    ?? '',
         };
 
+        // Save the new session before redirecting
+        await new Promise<void>((resolve, reject) =>
+          req.session.save(err => (err ? reject(err) : resolve()))
+        );
+
         // Create login history record
         await prisma.loginHistory.create({
           data: {
@@ -198,6 +283,7 @@ const authServiceModule: Module = {
           },
         });
 
+        logger.info(`[OAuth] Login successful: user=${user.username}, id=${user.id}`);
         res.redirect('/');
       } catch (error) {
         logger.error('Discord login callback error:', error);
