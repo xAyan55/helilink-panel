@@ -251,7 +251,21 @@
           let ports = [];
           try {
             if (node.allocatedPorts) {
-              ports = JSON.parse(node.allocatedPorts);
+              const raw = JSON.parse(node.allocatedPorts);
+              if (Array.isArray(raw)) {
+                ports = raw.map(item => {
+                  if (typeof item === 'number') {
+                    return { port: item, alias: null };
+                  }
+                  if (item && typeof item === 'object' && typeof item.port === 'number') {
+                    return {
+                      port: item.port,
+                      alias: typeof item.alias === 'string' ? item.alias : null
+                    };
+                  }
+                  return null;
+                }).filter(p => p !== null);
+              }
             }
           } catch (e) {
             console.error('Error parsing allocated ports:', e);
@@ -306,7 +320,12 @@
         });
       }
 
-      availablePorts = node.parsedPorts.filter(port => !usedPorts.has(port)).map(port => ({ port, label: `${nodeAddress}:${port}` }));
+      availablePorts = node.parsedPorts
+        .filter(portObj => !usedPorts.has(portObj.port))
+        .map(portObj => {
+          const label = portObj.alias ? `${portObj.alias} (${portObj.port})` : `${nodeAddress}:${portObj.port}`;
+          return { port: portObj.port, label: label };
+        });
       assignedPorts = assignedPorts.filter(port => availablePorts.some(item => item.port === Number(port.externalPort)));
       ensureMinimumPortRows();
       syncPortsButton();

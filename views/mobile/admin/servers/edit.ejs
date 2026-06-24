@@ -308,7 +308,27 @@
       const nodes = await response.json();
       nodes.forEach(node => {
         let ports = [];
-        try { ports = JSON.parse(node.allocatedPorts || '[]'); } catch {}
+        try {
+          if (node.allocatedPorts) {
+            const raw = JSON.parse(node.allocatedPorts);
+            if (Array.isArray(raw)) {
+              ports = raw.map(item => {
+                if (typeof item === 'number') {
+                  return { port: item, alias: null };
+                }
+                if (item && typeof item === 'object' && typeof item.port === 'number') {
+                  return {
+                    port: item.port,
+                    alias: typeof item.alias === 'string' ? item.alias : null
+                  };
+                }
+                return null;
+              }).filter(p => p !== null);
+            }
+          }
+        } catch (e) {
+          console.error('Error parsing allocated ports:', e);
+        }
         nodesData[node.id] = { ...node, parsedPorts: ports };
       });
       updatePortsForSelectedNode();
@@ -331,8 +351,11 @@
         } catch {}
       });
       availablePorts = (node.parsedPorts || [])
-        .filter(port => !usedPorts.has(port) || assignedPorts.some(item => Number(item.externalPort) === port))
-        .map(port => ({ port, label: `${node.address}:${port}` }));
+        .filter(portObj => !usedPorts.has(portObj.port) || assignedPorts.some(item => Number(item.externalPort) === portObj.port))
+        .map(portObj => {
+          const label = portObj.alias ? `${portObj.alias} (${portObj.port})` : `${node.address}:${portObj.port}`;
+          return { port: portObj.port, label: label };
+        });
       ensureMinimumPortRows();
       syncPortsButton();
     }

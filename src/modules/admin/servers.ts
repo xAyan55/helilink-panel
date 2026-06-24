@@ -14,6 +14,7 @@ import {
   parseServerPorts,
   serializeServerPorts,
   validatePortAssignments,
+  getAllocatedPortNumbers,
 } from '../../handlers/utils/server/ports';
 
 
@@ -177,9 +178,11 @@ const adminModule: Module = {
 
           const submittedPorts = normalizeServerPorts(ports);
           const minPorts = parseImagePortRequirements(selectedImage.portRequirements).length;
-          const allocatedPorts = server.nodeId === parseInt(nodeId)
-            ? JSON.parse(server.node.allocatedPorts || '[]')
-            : JSON.parse((await prisma.node.findUnique({ where: { id: parseInt(nodeId) } }))?.allocatedPorts || '[]');
+          const allocatedPorts = getAllocatedPortNumbers(
+            server.nodeId === parseInt(nodeId)
+              ? server.node.allocatedPorts
+              : (await prisma.node.findUnique({ where: { id: parseInt(nodeId) } }))?.allocatedPorts
+          );
           const existingServers = await prisma.server.findMany({
             where: { nodeId: parseInt(nodeId), NOT: { id: serverId } },
           });
@@ -328,16 +331,7 @@ const adminModule: Module = {
             return;
           }
 
-          let allocatedPorts = [];
-          try {
-            if (node.allocatedPorts) {
-              allocatedPorts = JSON.parse(node.allocatedPorts);
-            }
-          } catch (error) {
-            logger.error('Error parsing allocated ports:', error);
-            res.status(500).send('Error validating port allocation');
-            return;
-          }
+          const allocatedPorts = getAllocatedPortNumbers(node.allocatedPorts);
 
           const existingServers = await prisma.server.findMany({
             where: {

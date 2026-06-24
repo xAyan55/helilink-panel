@@ -1,6 +1,27 @@
 (function() {
   const pd = document.getElementById('page-data').dataset;
-  let allocatedPorts = JSON.parse(pd.allocatedPorts || '[]');
+  
+  // Parse allocated ports handling both legacy numeric array and new objects array formats
+  let rawPorts = [];
+  try {
+    rawPorts = JSON.parse(pd.allocatedPorts || '[]');
+  } catch (e) {
+    console.error('Error parsing allocated ports data attribute:', e);
+  }
+
+  let allocatedPorts = rawPorts.map(item => {
+    if (typeof item === 'number') {
+      return { port: item, alias: null };
+    }
+    if (item && typeof item === 'object' && typeof item.port === 'number') {
+      return {
+        port: item.port,
+        alias: typeof item.alias === 'string' ? item.alias : null
+      };
+    }
+    return null;
+  }).filter(item => item !== null);
+
   const usedPortsSet = new Set(JSON.parse(pd.usedPorts || '[]'));
 
   function getUsedPorts() { return usedPortsSet; }
@@ -10,35 +31,47 @@
     portsList.innerHTML = '';
     if (allocatedPorts.length === 0) {
       const emptyMessage = document.createElement('div');
-      emptyMessage.className = 'col-span-4 text-sm text-neutral-500 italic';
+      emptyMessage.className = 'col-span-full text-sm text-neutral-500 italic';
       emptyMessage.textContent = 'No ports allocated yet. Add ports that will be available for servers.';
       portsList.appendChild(emptyMessage);
       return;
     }
     const usedPorts = getUsedPorts();
-    allocatedPorts.forEach(port => {
-      portsList.appendChild(buildPortTag(port, usedPorts));
+    allocatedPorts.forEach(portObj => {
+      portsList.appendChild(buildPortTag(portObj, usedPorts));
     });
   }
 
-  function buildPortTag(port, usedPorts) {
+  function buildPortTag(portObj, usedPorts) {
+    const port = portObj.port;
     const isUsed = usedPorts.has(port);
     const portTag = document.createElement('div');
     portTag.dataset.port = port;
-    portTag.className = 'flex items-center justify-between rounded-lg ' + (isUsed ? 'bg-amber-600/10 dark:bg-amber-700/20' : 'bg-neutral-800/10 dark:bg-neutral-700/20') + ' px-3 py-1.5 text-sm';
+    portTag.className = 'flex items-center justify-between rounded-lg gap-2 ' + (isUsed ? 'bg-amber-600/10 dark:bg-amber-700/20' : 'bg-neutral-800/10 dark:bg-neutral-700/20') + ' px-3 py-1.5 text-sm';
     portTag.style.opacity = '0';
     portTag.style.transform = 'translateY(4px)';
 
     const portText = document.createElement('span');
-    portText.className = isUsed ? 'text-amber-600 dark:text-amber-400 flex items-center' : 'text-neutral-800 dark:text-neutral-300';
+    portText.className = isUsed ? 'text-amber-600 dark:text-amber-400 flex items-center shrink-0' : 'text-neutral-800 dark:text-neutral-300 shrink-0';
     if (isUsed) {
       portText.innerHTML = port + ' <span class="ml-2 text-xs bg-amber-600/20 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded">In use</span>';
     } else {
       portText.textContent = port;
     }
 
+    const aliasInput = document.createElement('input');
+    aliasInput.type = 'text';
+    aliasInput.placeholder = 'Alias (optional)';
+    aliasInput.maxLength = 50;
+    aliasInput.className = 'alias-input ml-2 rounded bg-neutral-200/50 dark:bg-neutral-800/50 text-xs px-2 py-0.5 border border-neutral-300 dark:border-neutral-700/50 w-32 focus:outline-none focus:ring-1 focus:ring-neutral-500';
+    aliasInput.value = portObj.alias || '';
+    aliasInput.oninput = (e) => {
+      portObj.alias = e.target.value;
+    };
+
     const deleteBtn = document.createElement('button');
-    deleteBtn.className = 'ml-2 text-neutral-500 hover:text-red-500 transition-colors';
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'shrink-0 ml-1 text-neutral-500 hover:text-red-500 transition-colors';
     deleteBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>';
 
     if (isUsed) {
@@ -53,6 +86,7 @@
     }
 
     portTag.appendChild(portText);
+    portTag.appendChild(aliasInput);
     portTag.appendChild(deleteBtn);
     return portTag;
   }
@@ -84,7 +118,9 @@
         return;
       }
       for (let port = start; port <= end; port++) {
-        if (!allocatedPorts.includes(port)) allocatedPorts.push(port);
+        if (!allocatedPorts.some(p => p.port === port)) {
+          allocatedPorts.push({ port: port, alias: null });
+        }
       }
     } else {
       const port = parseInt(input.trim());
@@ -92,15 +128,17 @@
         showToast('Invalid port. Port must be between 1024 and 65535.', 'error');
         return;
       }
-      if (!allocatedPorts.includes(port)) allocatedPorts.push(port);
+      if (!allocatedPorts.some(p => p.port === port)) {
+        allocatedPorts.push({ port: port, alias: null });
+      }
     }
 
-    allocatedPorts.sort((a, b) => a - b);
+    allocatedPorts.sort((a, b) => a.port - b.port);
 
     const portsList = document.getElementById('allocatedPortsList');
     portsList.innerHTML = '';
-    allocatedPorts.forEach((port, i) => {
-      const tag = buildPortTag(port, usedPorts);
+    allocatedPorts.forEach((portObj, i) => {
+      const tag = buildPortTag(portObj, usedPorts);
       portsList.appendChild(tag);
       setTimeout(() => animatePortIn(tag), i * 30);
     });
@@ -113,19 +151,19 @@
       return;
     }
 
-    allocatedPorts = allocatedPorts.filter(p => p !== port);
+    allocatedPorts = allocatedPorts.filter(p => p.port !== port);
     const portsList = document.getElementById('allocatedPortsList');
     portsList.innerHTML = '';
     if (allocatedPorts.length === 0) {
       const emptyMessage = document.createElement('div');
-      emptyMessage.className = 'col-span-4 text-sm text-neutral-500 italic';
+      emptyMessage.className = 'col-span-full text-sm text-neutral-500 italic';
       emptyMessage.textContent = 'No ports allocated yet. Add ports that will be available for servers.';
       portsList.appendChild(emptyMessage);
       return;
     }
     const used = getUsedPorts();
-    allocatedPorts.forEach((p) => {
-      const tag = buildPortTag(p, used);
+    allocatedPorts.forEach((pObj) => {
+      const tag = buildPortTag(pObj, used);
       portsList.appendChild(tag);
       tag.style.opacity = '1';
       tag.style.transform = '';
@@ -169,17 +207,18 @@
         body: JSON.stringify(nodeData)
       });
 
+      const data = await response.json();
       if (response.ok) {
-        console.log('Node updated:', await response.json());
+        console.log('Node updated:', data);
         showToast('Node updated. Looking good.', 'success');
         setTimeout(() => {
           window.location.href = '/admin/nodes?err=none';
         }, 1000);
       } else {
-        throw new Error('Failed to update node');
+        throw new Error(data.message || 'Failed to update node');
       }
     } catch (error) {
-      showToast('Error updating node: ' + error, 'error');
+      showToast('Error updating node: ' + error.message, 'error');
     }
   });
 
@@ -188,14 +227,14 @@
     portsList.innerHTML = '';
     if (allocatedPorts.length === 0) {
       const emptyMessage = document.createElement('div');
-      emptyMessage.className = 'col-span-4 text-sm text-neutral-500 italic';
+      emptyMessage.className = 'col-span-full text-sm text-neutral-500 italic';
       emptyMessage.textContent = 'No ports allocated yet. Add ports that will be available for servers.';
       portsList.appendChild(emptyMessage);
       return;
     }
     const usedPorts = getUsedPorts();
-    allocatedPorts.forEach((port, i) => {
-      const tag = buildPortTag(port, usedPorts);
+    allocatedPorts.forEach((portObj, i) => {
+      const tag = buildPortTag(portObj, usedPorts);
       portsList.appendChild(tag);
       setTimeout(() => animatePortIn(tag), i * 25);
     });

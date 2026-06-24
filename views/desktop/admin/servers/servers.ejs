@@ -123,7 +123,38 @@
                 <a href="/admin/node/<%= server.node.id %>/stats" class="font-medium text-neutral-800 dark:text-blue-400 hover:underline truncate max-w-[120px]" onclick="event.stopPropagation()"><%= server.node.name %></a>
               </td>
               <td class="whitespace-nowrap px-3 py-4 text-sm text-neutral-600 dark:text-neutral-400">
-                <%= server.node.address %>:<%= JSON.parse(server.Ports).filter(p => p.primary).map(p => p.externalPort || String(p.Port || '').split(':')[0]).pop() %>
+                <%
+                  let displayPort = '';
+                  try {
+                    const parsedPorts = JSON.parse(server.Ports || '[]');
+                    const primaryPortInfo = parsedPorts.find(p => p.primary) || parsedPorts[0];
+                    if (primaryPortInfo) {
+                      displayPort = primaryPortInfo.externalPort || String(primaryPortInfo.Port || '').split(':')[0];
+                    }
+                  } catch (e) {}
+
+                  let portAlias = null;
+                  if (displayPort && server.node && server.node.allocatedPorts) {
+                    try {
+                      const portNum = parseInt(displayPort, 10);
+                      const allocs = JSON.parse(server.node.allocatedPorts);
+                      if (Array.isArray(allocs)) {
+                        const matched = allocs.find(a => {
+                          if (typeof a === 'number') return a === portNum;
+                          if (a && typeof a === 'object') return a.port === portNum;
+                          return false;
+                        });
+                        if (matched && typeof matched === 'object' && matched.alias) {
+                          portAlias = matched.alias;
+                        }
+                      }
+                    } catch (e) {}
+                  }
+                %>
+                <div class="font-mono"><%= server.node.address %>:<%= displayPort %></div>
+                <% if (portAlias) { %>
+                  <div class="text-xs text-neutral-400 mt-0.5"><%= portAlias %></div>
+                <% } %>
               </td>
               <td class="whitespace-nowrap px-3 py-4 text-sm">
                 <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset

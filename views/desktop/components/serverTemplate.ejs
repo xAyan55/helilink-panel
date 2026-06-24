@@ -97,7 +97,25 @@
               if (value.includes(':address')) {
                 const primaryPort = server.Ports ? JSON.parse(server.Ports).find(p => p.primary) : null;
                 const portNumber = primaryPort ? (primaryPort.externalPort || String(primaryPort.Port || '').split(':')[0]) : '';
-                value = value.replace(':address', `${server.node.address}:${portNumber}`);
+                let portAlias = null;
+                if (portNumber && server.node && server.node.allocatedPorts) {
+                  try {
+                    const portNum = parseInt(portNumber, 10);
+                    const allocs = JSON.parse(server.node.allocatedPorts);
+                    if (Array.isArray(allocs)) {
+                      const matched = allocs.find(a => {
+                        if (typeof a === 'number') return a === portNum;
+                        if (a && typeof a === 'object') return a.port === portNum;
+                        return false;
+                      });
+                      if (matched && typeof matched === 'object' && matched.alias) {
+                        portAlias = matched.alias;
+                      }
+                    }
+                  } catch (e) {}
+                }
+                const aliasSuffix = portAlias ? ` (${portAlias})` : '';
+                value = value.replace(':address', `${server.node.address}:${portNumber}${aliasSuffix}`);
               }
               if (value.includes(':image')) value = value.replace(':image', server.image.name || 'Unknown');
               if (value.includes(':node')) value = value.replace(':node', server.node.name);

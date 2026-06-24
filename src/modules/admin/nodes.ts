@@ -7,6 +7,8 @@ import logger from '../../handlers/logger';
 import axios from 'axios';
 import { getParamAsNumber } from '../../utils/typeHelpers';
 import { daemonSchemeSync } from '../../handlers/utils/core/daemonRequest';
+import { parseAllocatedPorts, AllocatedPort } from '../../handlers/utils/server/ports';
+
 
 
 function generateApiKey(length: number): string {
@@ -385,7 +387,6 @@ const adminModule: Module = {
           const disk = parseInt(req.body.disk);
           const address = req.body.address;
           const port = parseInt(req.body.port);
-          const allocatedPorts = req.body.allocatedPorts || '[]';
 
           if (
             !name ||
@@ -402,37 +403,156 @@ const adminModule: Module = {
             return;
           }
 
-          // Validate allocated ports
-          try {
-            const parsedPorts = JSON.parse(allocatedPorts);
-            if (!Array.isArray(parsedPorts)) {
-              throw new Error('Allocated ports must be an array');
+          const existingNode = await prisma.node.findUnique({
+            where: { id: nodeId },
+          });
+
+          if (!existingNode) {
+            res.status(404).json({ message: 'Node not found.' });
+            return;
+          }
+
+          const updateData: any = {
+            name,
+            ram,
+            cpu,
+            disk,
+            address,
+            port,
+          };
+
+          const incomingPortsRaw = req.body.allocatedPorts;
+          let isModified = true;
+
+          if (incomingPortsRaw !== undefined) {
+            function areRawPortsEqual(a: any[], b: any[]): boolean {
+              if (a.length !== b.length) return false;
+              for (let i = 0; i < a.length; i++) {
+                const itemA = a[i];
+                const itemB = b[i];
+                if (typeof itemA !== typeof itemB) return false;
+                if (itemA && typeof itemA === 'object' && itemB && typeof itemB === 'object') {
+                  if (itemA.port !== itemB.port) return false;
+                  if (itemA.alias !== itemB.alias) return false;
+                } else {
+                  if (itemA !== itemB) return false;
+                }
+              }
+              return true;
             }
 
-            // Validate each port
-            for (const port of parsedPorts) {
-              if (typeof port !== 'number' || port < 1024 || port > 65535) {
-                throw new Error('Each port must be a number between 1024 and 65535');
+            try {
+              const currentParsed = JSON.parse(existingNode.allocatedPorts || '[]');
+              const incomingParsed = JSON.parse(incomingPortsRaw);
+              if (Array.isArray(currentParsed) && Array.isArray(incomingParsed)) {
+                if (areRawPortsEqual(currentParsed, incomingParsed)) {
+                  isModified = false;
+                }
               }
+            } catch (e) {
+              // fallback to normal validation
             }
-          } catch (error: any) {
-            res.status(400).json({
-              message: 'Invalid allocated ports format: ' + (error.message || 'Unknown error'),
-            });
-            return;
+          } else {
+            isModified = false;
+          }
+
+          if (isModified && incomingPortsRaw !== undefined) {
+            try {
+              const parsed = JSON.parse(incomingPortsRaw);
+              if (!Array.isArray(parsed)) {
+                res.status(400).json({ message: 'Invalid allocated ports format: Must be an array' });
+                return;
+              }
+
+              const seenPorts = new Set<number>();
+              const normalizedPorts: AllocatedPort[] = [];
+
+              for (const item of parsed) {
+                let rawPortVal: any = null;
+                let rawAliasVal: any = null;
+                let hasAlias = false;
+
+                if (item && typeof item === 'object') {
+                  rawPortVal = item.port;
+                  if ('alias' in item) {
+                    rawAliasVal = item.alias;
+                    hasAlias = true;
+                  }
+                } else {
+                  rawPortVal = item;
+                }
+
+                let portNum: number;
+                if (typeof rawPortVal === 'number' && Number.isInteger(rawPortVal)) {
+                  portNum = rawPortVal;
+                } else if (typeof rawPortVal === 'string') {
+                  if (/^\d+$/.test(rawPortVal)) {
+                    portNum = parseInt(rawPortVal, 10);
+                  } else {
+                    res.status(400).json({ message: `Invalid port number: ${rawPortVal}` });
+                    return;
+                  }
+                } else {
+                  res.status(400).json({ message: `Invalid port number: ${rawPortVal}` });
+                  return;
+                }
+
+                if (portNum < 1 || portNum > 65535) {
+                  res.status(400).json({ message: `Invalid port number: ${portNum}` });
+                  return;
+                }
+
+                if (seenPorts.has(portNum)) {
+                  res.status(400).json({ message: `Duplicate port detected: ${portNum}` });
+                  return;
+                }
+                seenPorts.add(portNum);
+
+                let aliasStr: string | null = null;
+                if (hasAlias && rawAliasVal !== undefined) {
+                  if (typeof rawAliasVal === 'string') {
+                    const trimmed = rawAliasVal.trim();
+                    if (rawAliasVal !== '' && trimmed === '') {
+                      res.status(400).json({ message: 'Alias cannot consist only of whitespace' });
+                      return;
+                    }
+                    if (trimmed === '') {
+                      aliasStr = null;
+                    } else {
+                      if (trimmed.length > 50) {
+                        res.status(400).json({ message: 'Each alias must be 50 characters or less' });
+                        return;
+                      }
+                      const lower = trimmed.toLowerCase();
+                      if (lower === 'null' || lower === 'undefined' || lower === 'nan') {
+                        res.status(400).json({ message: `Alias contains reserved word: ${trimmed}` });
+                        return;
+                      }
+                      aliasStr = trimmed;
+                    }
+                  } else if (rawAliasVal === null) {
+                    aliasStr = null;
+                  } else {
+                    res.status(400).json({ message: 'Alias must be a string' });
+                    return;
+                  }
+                }
+
+                normalizedPorts.push({ port: portNum, alias: aliasStr });
+              }
+
+              updateData.allocatedPorts = JSON.stringify(normalizedPorts);
+            } catch (error: any) {
+              res.status(400).json({
+                message: 'Invalid allocated ports format: ' + (error.message || 'Unknown error'),
+              });
+              return;
+            }
           }
 
           const node = await prisma.node.update({
             where: { id: nodeId },
-            data: {
-              name,
-              ram,
-              cpu,
-              disk,
-              address,
-              port,
-              allocatedPorts,
-            },
+            data: updateData,
           });
 
           res.status(200).json({ message: 'Node updated successfully.', node });

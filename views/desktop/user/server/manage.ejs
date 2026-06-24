@@ -161,8 +161,43 @@
             <div class="stats-card overflow-hidden bg-white dark:bg-neutral-800/50 backdrop-blur-sm border border-neutral-200 dark:border-neutral-700/30 rounded-xl px-4 py-4 shadow-sm hover:shadow-md transition-shadow duration-200 hover:bg-neutral-50 dark:hover:bg-neutral-700/30 group flex-1" style="--i:0">
                 <div class="relative z-10 flex items-start justify-between gap-2">
                     <div class="min-w-0">
-                        <h2 class="text-sm font-medium text-neutral-500 dark:text-neutral-400"><%= req.translations.addressIP %>:</h2>
-                        <p id="server-ip-text" class="mt-1 text-sm font-medium font-mono tracking-tight text-neutral-800 dark:text-white break-all"><%= server.node.address %>:<%= server.Ports ? JSON.parse(server.Ports).filter(Port => Port.primary).map(Port => Port.externalPort || String(Port.Port || '').split(':')[0]).pop() : '' %></p>
+                        <%
+                          let displayPort = '';
+                          try {
+                            const parsedPorts = JSON.parse(server.Ports || '[]');
+                            const primaryPortInfo = parsedPorts.find(p => p.primary) || parsedPorts[0];
+                            if (primaryPortInfo) {
+                              displayPort = primaryPortInfo.externalPort || String(primaryPortInfo.Port || '').split(':')[0];
+                            }
+                          } catch (e) {}
+
+                          let portAlias = null;
+                          if (displayPort && server.node && server.node.allocatedPorts) {
+                            try {
+                              const portNum = parseInt(displayPort, 10);
+                              const allocs = JSON.parse(server.node.allocatedPorts);
+                              if (Array.isArray(allocs)) {
+                                const matched = allocs.find(a => {
+                                  if (typeof a === 'number') return a === portNum;
+                                  if (a && typeof a === 'object') return a.port === portNum;
+                                  return false;
+                                });
+                                if (matched && typeof matched === 'object' && matched.alias) {
+                                  portAlias = matched.alias;
+                                }
+                              }
+                            } catch (e) {}
+                          }
+                        %>
+                        <h2 class="text-sm font-medium text-neutral-500 dark:text-neutral-400 flex items-center gap-1.5 flex-wrap">
+                          <%= req.translations.addressIP %>:
+                        </h2>
+                        <p class="mt-1 text-sm font-medium font-mono tracking-tight text-neutral-800 dark:text-white break-all">
+                          <span id="server-ip-text"><%= server.node.address %>:<%= displayPort %></span>
+                          <% if (portAlias) { %>
+                            <span class="text-neutral-400 font-sans ml-1 text-xs font-normal">(<%= portAlias %>)</span>
+                          <% } %>
+                        </p>
                     </div>
                     <button id="copy-ip-btn" onclick="copyServerIP()" title="Copy" class="shrink-0 mt-1 rounded-lg p-1.5 bg-neutral-100 dark:bg-neutral-700/50 hover:bg-neutral-200 dark:hover:bg-neutral-600/50 transition-colors">
                         <span id="copy-icon"><%- icon('copy', { class: 'h-3.5 w-3.5 text-neutral-500' }) %></span>

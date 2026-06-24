@@ -117,7 +117,38 @@
           </div>
           <div class="flex-1 bg-neutral-100 dark:bg-neutral-800/50 rounded-lg px-2.5 py-2">
             <p class="text-[10px] text-neutral-500 mb-0.5">Port</p>
-            <p class="text-xs font-medium text-neutral-700 dark:text-neutral-300 font-mono truncate"><%= server.node.address %>:<%= JSON.parse(server.Ports).filter(p => p.primary).map(p => p.externalPort || String(p.Port || '').split(':')[0]).pop() %></p>
+            <%
+              let displayPort = '';
+              try {
+                const parsedPorts = JSON.parse(server.Ports || '[]');
+                const primaryPortInfo = parsedPorts.find(p => p.primary) || parsedPorts[0];
+                if (primaryPortInfo) {
+                  displayPort = primaryPortInfo.externalPort || String(primaryPortInfo.Port || '').split(':')[0];
+                }
+              } catch (e) {}
+
+              let portAlias = null;
+              if (displayPort && server.node && server.node.allocatedPorts) {
+                try {
+                  const portNum = parseInt(displayPort, 10);
+                  const allocs = JSON.parse(server.node.allocatedPorts);
+                  if (Array.isArray(allocs)) {
+                    const matched = allocs.find(a => {
+                      if (typeof a === 'number') return a === portNum;
+                      if (a && typeof a === 'object') return a.port === portNum;
+                      return false;
+                    });
+                    if (matched && typeof matched === 'object' && matched.alias) {
+                      portAlias = matched.alias;
+                    }
+                  }
+                } catch (e) {}
+              }
+            %>
+            <p class="text-xs font-medium text-neutral-700 dark:text-neutral-300 font-mono truncate" title="<%= server.node.address %>:<%= displayPort %><%= portAlias ? ` (${portAlias})` : '' %>">
+              <%= server.node.address %>:<%= displayPort %>
+              <% if (portAlias) { %><span class="text-[10px] text-neutral-400 font-sans block truncate"><%= portAlias %></span><% } %>
+            </p>
           </div>
         </div>
 

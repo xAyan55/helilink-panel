@@ -5,6 +5,41 @@ export interface ServerPortAssignment {
   primary: boolean;
 }
 
+export interface AllocatedPort {
+  port: number;
+  alias: string | null;
+}
+
+export function parseAllocatedPorts(raw: string | null | undefined): AllocatedPort[] {
+  try {
+    const parsed = JSON.parse(raw || '[]');
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((item) => {
+      if (typeof item === 'number') {
+        return { port: item, alias: null };
+      }
+      if (typeof item === 'string') {
+        const num = parseInt(item, 10);
+        if (!isNaN(num)) return { port: num, alias: null };
+      }
+      if (item && typeof item === 'object' && typeof item.port === 'number') {
+        return {
+          port: item.port,
+          alias: typeof item.alias === 'string' ? item.alias.trim() : null
+        };
+      }
+      return null;
+    }).filter((item): item is AllocatedPort => item !== null);
+  } catch {
+    return [];
+  }
+}
+
+export function getAllocatedPortNumbers(raw: string | null | undefined): number[] {
+  return parseAllocatedPorts(raw).map((a) => a.port);
+}
+
+
 export interface ServerPortRecord {
   Port?: string | number;
   name?: string;

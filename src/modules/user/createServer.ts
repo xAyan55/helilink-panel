@@ -10,6 +10,7 @@ import {
   getUsedExternalPorts,
   parseImagePortRequirements,
   serializeServerPorts,
+  getAllocatedPortNumbers,
 } from '../../handlers/utils/server/ports';
 
 function pickAvailablePorts(allocatedPorts: number[], usedPorts: number[], count: number): number[] {
@@ -139,12 +140,7 @@ const userCreateServerModule: Module = {
         const node = await prisma.node.findUnique({ where: { id: parseInt(nodeId) } });
         if (!node) return res.status(400).json({ error: 'Node not found.' });
 
-        let allocatedPorts: number[] = [];
-        try {
-          if (node.allocatedPorts) allocatedPorts = JSON.parse(node.allocatedPorts);
-        } catch {
-          return res.status(500).json({ error: 'Node port configuration is invalid.' });
-        }
+        const allocatedPorts = getAllocatedPortNumbers(node.allocatedPorts);
 
         const image = await prisma.images.findUnique({ where: { id: parseInt(imageId) } });
         if (!image) return res.status(400).json({ error: 'Image not found.' });
