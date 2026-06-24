@@ -305,7 +305,10 @@ app.use((req, res, next) => {
   next();
 });
 
-// Rate limiter — uses cached settings, no per-request DB hit
+// Rate limiter — uses cached settings, no per-request DB hit.
+// validate.xForwardedForHeader is disabled because we already set
+// app.set('trust proxy', true) above; express-rate-limit v8's own
+// validation can false-positive under Express 5 + Cloudflare Tunnel.
 app.use(
   rateLimit({
     windowMs: 60 * 1000,
@@ -313,6 +316,7 @@ app.use(
     skip: () => !getSecurityCache().rateLimitEnabled,
     standardHeaders: true,
     legacyHeaders: false,
+    validate: { xForwardedForHeader: false },
   }),
 );
 
