@@ -37,13 +37,14 @@ const authServiceModule: Module = {
         const state = randomBytes(16).toString('hex');
         req.session.discordOAuthState = state;
 
-        console.log('OAUTH REDIRECT');
-        console.log('SESSION ID', req.sessionID);
-        console.log('STATE', state);
-
-        logger.info(`[OAuth Debug] Generated OAuth state: ${state}`);
-        logger.info(`[OAuth Debug] Session ID before redirect: ${req.sessionID}`);
-        logger.info(`[OAuth Debug] Session contents before redirect: ${JSON.stringify(req.session)}`);
+        logger.info(`[OAuth Debug] === REDIRECT START ===`);
+        logger.info(`[OAuth Debug] Generated state: ${state}`);
+        logger.info(`[OAuth Debug] Session ID: ${req.sessionID}`);
+        logger.info(`[OAuth Debug] Session is new: ${!req.session.cookie.expires}`);
+        logger.info(`[OAuth Debug] Protocol: ${req.protocol}, Secure: ${req.secure}`);
+        logger.info(`[OAuth Debug] X-Forwarded-Proto: ${req.headers['x-forwarded-proto']}`);
+        logger.info(`[OAuth Debug] Cookie header present: ${!!req.headers.cookie}`);
+        logger.info(`[OAuth Debug] connect.sid in cookies: ${!!(req.headers.cookie && req.headers.cookie.includes('connect.sid'))}`);
 
         const clientID = process.env.DISCORD_CLIENT_ID || '';
         const redirectURI = encodeURIComponent(process.env.DISCORD_REDIRECT_URI || '');
@@ -51,9 +52,10 @@ const authServiceModule: Module = {
 
         req.session.save((err) => {
           if (err) {
-            logger.error('Error saving session before OAuth redirect:', err);
+            logger.error('[OAuth Debug] Session save FAILED before redirect:', err);
             return next(err);
           }
+          logger.info(`[OAuth Debug] Session saved OK. Redirecting to Discord...`);
           res.redirect(authorizeUrl);
         });
       } catch (err) {
@@ -67,21 +69,23 @@ const authServiceModule: Module = {
       const { code, state } = req.query;
       const sessionState = req.session.discordOAuthState;
 
-      console.log('OAUTH CALLBACK');
-      console.log('SESSION ID', req.sessionID);
-      console.log('STORED STATE', req.session.discordOAuthState);
-      console.log('RECEIVED STATE', req.query.state);
-
-      logger.info(`[OAuth Debug] Callback state received: ${state}`);
-      logger.info(`[OAuth Debug] Session ID during callback: ${req.sessionID}`);
-      logger.info(`[OAuth Debug] Session contents during callback: ${JSON.stringify(req.session)}`);
+      logger.info(`[OAuth Debug] === CALLBACK START ===`);
+      logger.info(`[OAuth Debug] Session ID: ${req.sessionID}`);
+      logger.info(`[OAuth Debug] Received state: ${state}`);
+      logger.info(`[OAuth Debug] Stored state: ${sessionState}`);
+      logger.info(`[OAuth Debug] State match: ${state === sessionState}`);
+      logger.info(`[OAuth Debug] Protocol: ${req.protocol}, Secure: ${req.secure}`);
+      logger.info(`[OAuth Debug] X-Forwarded-Proto: ${req.headers['x-forwarded-proto']}`);
+      logger.info(`[OAuth Debug] Cookie header present: ${!!req.headers.cookie}`);
+      logger.info(`[OAuth Debug] connect.sid in cookies: ${!!(req.headers.cookie && req.headers.cookie.includes('connect.sid'))}`);
+      logger.info(`[OAuth Debug] Session keys: ${Object.keys(req.session).join(', ')}`);
 
       // Clear OAuth state from session immediately and save
       delete req.session.discordOAuthState;
       await new Promise<void>((resolve) => req.session.save(() => resolve()));
 
       if (!state || state !== sessionState) {
-        logger.warn(`[OAuth Debug] State mismatch! Received: ${state}, Stored: ${sessionState}`);
+        logger.warn(`[OAuth Debug] STATE MISMATCH! Received: ${state}, Stored: ${sessionState}. Session ID: ${req.sessionID}`);
         return res.redirect('/login?err=invalid_state');
       }
 

@@ -320,7 +320,11 @@ app.use(
 // Only mark cookies as secure when the server is actually serving over HTTPS.
 // Setting secure:true on a plain HTTP server causes browsers to silently drop
 // all session cookies, breaking login on local network setups.
-const useSecureCookie = process.env.URL?.startsWith('https://') ?? false;
+// 'auto' lets express-session auto-detect HTTPS when trust proxy is enabled.
+// This avoids the need for the URL env var to match the actual protocol (e.g.
+// behind Cloudflare Tunnel, the .env URL may be http:// but the real client
+// connection is HTTPS).
+const useSecureCookie: boolean | 'auto' = 'auto';
 const sessionSecret = process.env.SESSION_SECRET;
 
 if (!sessionSecret && process.env.NODE_ENV === 'production') {
@@ -374,10 +378,17 @@ app.use(translationMiddleware);
 // SPA middleware for detecting AJAX requests
 app.use(spaMiddleware);
 
-// Apply CSRF protection to all routes except for API routes and WebSocket routes
+// Apply CSRF protection to all routes except for API, WebSocket, and OAuth routes.
+// OAuth routes are protected by their own state-based CSRF mechanism. Applying
+// double-submit CSRF on top is unnecessary and actively harmful: the CSRF cookie
+// uses sameSite:'strict', which browsers do NOT send on cross-site redirects
+// (Discord → panel callback), potentially breaking the session flow.
 app.use((req, res, next) => {
-  // Skip CSRF protection for WebSocket routes and API routes
-  if (req.path.startsWith('/ws') || req.path.startsWith('/api/')) {
+  if (
+    req.path.startsWith('/ws') ||
+    req.path.startsWith('/api/') ||
+    req.path.startsWith('/auth/discord')
+  ) {
     return next();
   }
   csrfProtection(req, res, next);
@@ -385,7 +396,11 @@ app.use((req, res, next) => {
 
 // Add CSRF token to view locals
 app.use((req, res, next) => {
-  if (req.path.startsWith('/ws') || req.path.startsWith('/api/')) {
+  if (
+    req.path.startsWith('/ws') ||
+    req.path.startsWith('/api/') ||
+    req.path.startsWith('/auth/discord')
+  ) {
     return next();
   }
   addCsrfTokenToLocals(req, res, next);
