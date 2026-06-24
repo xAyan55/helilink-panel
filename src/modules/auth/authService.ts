@@ -14,7 +14,7 @@ declare module 'express-session' {
       username: string;
       description: string;
     };
-    oauthState?: string;
+    discordOAuthState?: string;
   }
 }
 
@@ -25,7 +25,7 @@ const authServiceModule: Module = {
     version:          '2.0.0',
     moduleVersion: '2.0.0',
     author:        'HeliLink',
-    license:       'MIT',
+    license:       'ENV',
   },
 
   router: () => {
@@ -35,13 +35,23 @@ const authServiceModule: Module = {
     router.get('/auth/discord', (req: Request, res: Response) => {
       try {
         const state = randomBytes(16).toString('hex');
-        req.session.oauthState = state;
+        req.session.discordOAuthState = state;
+
+        logger.info(`[OAuth Debug] Generated OAuth state: ${state}`);
+        logger.info(`[OAuth Debug] Session ID before redirect: ${req.sessionID}`);
+        logger.info(`[OAuth Debug] Session contents before redirect: ${JSON.stringify(req.session)}`);
 
         const clientID = process.env.DISCORD_CLIENT_ID || '';
         const redirectURI = encodeURIComponent(process.env.DISCORD_REDIRECT_URI || '');
         const authorizeUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientID}&redirect_uri=${redirectURI}&response_type=code&scope=identify+email&state=${state}`;
 
-        res.redirect(authorizeUrl);
+        req.session.save((err) => {
+          if (err) {
+            logger.error('Error saving session before OAuth redirect:', err);
+            return res.redirect('/login?err=oauth_init_failed');
+          }
+          res.redirect(authorizeUrl);
+        });
       } catch (err) {
         logger.error('Error initiating Discord OAuth:', err);
         res.redirect('/login?err=oauth_init_failed');
@@ -51,12 +61,18 @@ const authServiceModule: Module = {
     // ── GET /auth/discord/callback ───────────────────────────────────────────
     router.get('/auth/discord/callback', async (req: Request, res: Response) => {
       const { code, state } = req.query;
-      const sessionState = req.session.oauthState;
+      const sessionState = req.session.discordOAuthState;
 
-      // Clear OAuth state from session immediately
-      delete req.session.oauthState;
+      logger.info(`[OAuth Debug] Callback state received: ${state}`);
+      logger.info(`[OAuth Debug] Session ID during callback: ${req.sessionID}`);
+      logger.info(`[OAuth Debug] Session contents during callback: ${JSON.stringify(req.session)}`);
+
+      // Clear OAuth state from session immediately and save
+      delete req.session.discordOAuthState;
+      await new Promise<void>((resolve) => req.session.save(() => resolve()));
 
       if (!state || state !== sessionState) {
+        logger.warn(`[OAuth Debug] State mismatch! Received: ${state}, Stored: ${sessionState}`);
         return res.redirect('/login?err=invalid_state');
       }
 
