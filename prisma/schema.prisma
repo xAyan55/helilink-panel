@@ -8,27 +8,32 @@ datasource db {
 }
 
 model Users {
-  id            Int              @id @default(autoincrement())
-  email         String           @unique
-  username      String?          @unique
-  password      String
-  isAdmin       Boolean          @default(false)
-  description   String?          @default("No About Me")
-  avatar        String?
-  permissions   String?          @default("[]")
-  serverLimit   Int?             @default(0)
-  maxMemory     Int?             @default(0)
-  maxCpu        Int?             @default(0)
-  maxStorage    Int?             @default(0)
-  loginAttempts Int              @default(0)
-  lockedUntil   DateTime?
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  id                   Int              @id @default(autoincrement())
+  email                String?          @unique
+  username             String?          @unique
+  password             String?
+  discord_id           String?          @unique
+  discord_username     String?
+  discord_display_name String?
+  discord_avatar       String?
+  discord_email        String?
+  isAdmin              Boolean          @default(false)
+  description          String?          @default("No About Me")
+  avatar               String?
+  permissions          String?          @default("[]")
+  serverLimit          Int?             @default(0)
+  maxMemory            Int?             @default(0)
+  maxCpu               Int?             @default(0)
+  maxStorage           Int?             @default(0)
+  loginAttempts        Int              @default(0)
+  lockedUntil          DateTime?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
 
-  servers       Server[]
-  folders       ServerFolder[]
-  apiKeys       ApiKey[]
-  loginHistory  LoginHistory[]
+  servers              Server[]
+  folders              ServerFolder[]
+  apiKeys              ApiKey[]
+  loginHistory         LoginHistory[]
 }
 
 model Session {

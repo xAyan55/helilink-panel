@@ -1,5 +1,5 @@
 const usernameInput = document.getElementById('userUsername');
-const passwordInput = document.getElementById('userPassword');
+const discordIdInput = document.getElementById('userDiscordId');
 const createBtn = document.getElementById('createuserBtn');
 
 function setCrit(id, passing) {
@@ -38,33 +38,26 @@ function checkUsername() {
   return lengthOk && charsOk;
 }
 
-function checkPassword() {
-  const val = passwordInput.value;
+function checkDiscordId() {
+  const val = discordIdInput.value;
   if (!val) {
-    resetCrit('crit-length');
-    resetCrit('crit-letter');
-    resetCrit('crit-number');
+    resetCrit('crit-discordid-numeric');
     return false;
   }
-  const lengthOk = val.length >= 8;
-  const letterOk = /[A-Za-z]/.test(val);
-  const numberOk = /\d/.test(val);
-  setCrit('crit-length', lengthOk);
-  setCrit('crit-letter', letterOk);
-  setCrit('crit-number', numberOk);
-  return lengthOk && letterOk && numberOk;
+  const numericOk = /^\d+$/.test(val.trim());
+  setCrit('crit-discordid-numeric', numericOk);
+  return numericOk;
 }
 
 usernameInput.addEventListener('input', checkUsername);
-passwordInput.addEventListener('input', checkPassword);
+discordIdInput.addEventListener('input', checkDiscordId);
 
 createBtn.addEventListener('click', async () => {
-  const emailVal = document.getElementById('userEmail').value.trim();
+  const discordIdVal = discordIdInput.value.trim();
   const usernameVal = usernameInput.value.trim();
-  const passwordVal = passwordInput.value;
   const isAdmin = document.getElementById('userIsAdminSwitch').checked;
 
-  if (!emailVal || !usernameVal || !passwordVal) {
+  if (!discordIdVal || !usernameVal) {
     showToast('Please fill in all required fields.', 'error');
     return;
   }
@@ -72,8 +65,8 @@ createBtn.addEventListener('click', async () => {
     showToast('Username must be 3–20 characters, letters and numbers only.', 'error');
     return;
   }
-  if (!checkPassword()) {
-    showToast('Password must be at least 8 characters with a letter and number.', 'error');
+  if (!checkDiscordId()) {
+    showToast('Discord ID must be a numeric string.', 'error');
     return;
   }
 
@@ -84,7 +77,7 @@ createBtn.addEventListener('click', async () => {
     const response = await fetch('/admin/users/create-user', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: emailVal, username: usernameVal, password: passwordVal, isAdmin }),
+      body: JSON.stringify({ discordId: discordIdVal, username: usernameVal, isAdmin }),
     });
 
     if (response.ok) {
@@ -95,7 +88,7 @@ createBtn.addEventListener('click', async () => {
         setTimeout(() => { window.location.href = '/admin/users?err=none'; }, 1000);
       }, 500);
     } else {
-      const err = await response.json().catch(() => ({ message: 'Unknown error' }));
+      const err = await response.json().catch(() => ({ message: 'Failed to create user.' }));
       loader.close();
       showToast(err.message || 'Failed to create user.', 'error');
     }

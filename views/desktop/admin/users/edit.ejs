@@ -27,7 +27,7 @@
             <img class="h-12 w-12 rounded-xl object-cover shrink-0 border border-neutral-200 dark:border-neutral-700/30" src="<%= dataUser.avatar ? dataUser.avatar : 'https://api.dicebear.com/9.x/thumbs/svg?seed=' + encodeURIComponent(dataUser.username) %>" alt="">
             <div>
               <p class="text-sm font-semibold text-neutral-800 dark:text-white"><%= dataUser.username %></p>
-              <p class="text-xs text-neutral-500 dark:text-neutral-400"><%= dataUser.email %></p>
+              <p class="text-xs text-neutral-500 dark:text-neutral-400"><%= dataUser.discord_id || 'No Discord ID linked' %></p>
             </div>
           </div>
           <form id="editUserForm">
@@ -54,18 +54,17 @@
                   >
                 </div>
 
-                <!-- Email -->
+                <!-- Discord ID -->
                 <div>
-                  <label for="email" class="flex items-center gap-1.5 text-neutral-700 dark:text-white text-sm font-medium mb-2">
-                    <%- icon('mail', { size: 14, class: 'shrink-0' }) %>
-                    <%= req.translations.email || 'Email' %>
+                  <label for="discordId" class="flex items-center gap-1.5 text-neutral-700 dark:text-white text-sm font-medium mb-2">
+                    Discord ID
                   </label>
                   <input
-                    type="email"
-                    id="email"
-                    name="email"
-                    value="<%= dataUser.email %>"
-                    class="rounded-xl focus:ring focus:ring-neutral-800/10 focus:border-neutral-800/20 text-neutral-800 dark:text-white text-sm mt-2 mb-4 w-full hover:bg-white/5 px-4 py-2 bg-neutral-400/10 dark:bg-neutral-600/20 placeholder:text-neutral-950/50 dark:placeholder:text-white/20 border border-neutral-800/10 dark:border-white/5"
+                    type="text"
+                    id="discordId"
+                    name="discordId"
+                    value="<%= dataUser.discord_id || '' %>"
+                    class="rounded-xl focus:ring focus:ring-neutral-800/10 focus:border-neutral-800/20 text-neutral-800 dark:text-white text-sm mt-2 mb-4 w-full hover:bg-white/5 px-4 py-2 bg-neutral-400/10 dark:bg-neutral-600/20 border border-neutral-800/10 dark:border-white/5"
                     required
                   >
                 </div>
@@ -84,37 +83,25 @@
                 </div>
               </div>
 
-              <!-- Security Section -->
+              <!-- Discord Sync Status Section -->
               <div class="space-y-6">
                 <h2 class="text-lg font-medium text-neutral-800 dark:text-white border-b border-neutral-200 dark:border-white/10 pb-2">
-                  <%= req.translations.security || 'Security' %>
+                  Discord Sync Status
                 </h2>
-
-                <!-- Password -->
                 <div>
-                  <label for="password" class="flex items-center gap-1.5 text-neutral-700 dark:text-white text-sm font-medium mb-2">
-                    <%- icon('lock', { size: 14, class: 'shrink-0' }) %>
-                    <%= req.translations.newPassword || 'New Password' %> <span class="text-neutral-400 text-xs">(<%= req.translations.leaveBlankToKeep || 'Leave blank to keep current password' %>)</span>
-                  </label>
-                  <input
-                    type="password"
-                    id="password"
-                    name="password"
-                    class="rounded-xl focus:ring focus:ring-neutral-800/10 focus:border-neutral-800/20 text-neutral-800 dark:text-white text-sm mt-2 mb-4 w-full hover:bg-white/5 px-4 py-2 bg-neutral-400/10 dark:bg-neutral-600/20 placeholder:text-neutral-950/50 dark:placeholder:text-white/20 border border-neutral-800/10 dark:border-white/5"
-                  >
+                  <label class="block text-neutral-500 dark:text-neutral-400 text-xs font-medium mb-1">Synced Username</label>
+                  <input type="text" value="<%= dataUser.discord_username || 'Not Synced' %>" readonly
+                    class="rounded-xl text-neutral-500 bg-neutral-100 dark:bg-neutral-800/40 text-sm w-full px-4 py-2 border border-neutral-200 dark:border-neutral-600/30 cursor-not-allowed outline-none">
                 </div>
-
-                <!-- Confirm Password -->
                 <div>
-                  <label for="confirmPassword" class="block text-neutral-700 dark:text-white text-sm font-medium mb-2">
-                    <%= req.translations.confirmPassword || 'Confirm Password' %>
-                  </label>
-                  <input
-                    type="password"
-                    id="confirmPassword"
-                    name="confirmPassword"
-                    class="rounded-xl focus:ring focus:ring-neutral-800/10 focus:border-neutral-800/20 text-neutral-800 dark:text-white text-sm mt-2 mb-4 w-full hover:bg-white/5 px-4 py-2 bg-neutral-400/10 dark:bg-neutral-600/20 placeholder:text-neutral-950/50 dark:placeholder:text-white/20 border border-neutral-800/10 dark:border-white/5"
-                  >
+                  <label class="block text-neutral-500 dark:text-neutral-400 text-xs font-medium mb-1">Synced Display Name</label>
+                  <input type="text" value="<%= dataUser.discord_display_name || 'Not Synced' %>" readonly
+                    class="rounded-xl text-neutral-500 bg-neutral-100 dark:bg-neutral-800/40 text-sm w-full px-4 py-2 border border-neutral-200 dark:border-neutral-600/30 cursor-not-allowed outline-none">
+                </div>
+                <div>
+                  <label class="block text-neutral-500 dark:text-neutral-400 text-xs font-medium mb-1">Synced Email</label>
+                  <input type="text" value="<%= dataUser.discord_email || 'Not Synced' %>" readonly
+                    class="rounded-xl text-neutral-500 bg-neutral-100 dark:bg-neutral-800/40 text-sm w-full px-4 py-2 border border-neutral-200 dark:border-neutral-600/30 cursor-not-allowed outline-none">
                 </div>
 
                 <!-- Admin Status -->
@@ -203,7 +190,6 @@
   data-user-id="<%= dataUser.id %>"
   data-enabled-text="<%= req.translations.enabled || 'Enabled' %>"
   data-disabled-text="<%= req.translations.disabled || 'Disabled' %>"
-  data-passwords-do-not-match="<%= req.translations.passwordsDoNotMatch || 'Passwords do not match' %>"
   data-updating-user="<%= req.translations.updatingUser || 'Updating User' %>"
   data-processing-user-update="<%= req.translations.processingUserUpdate || 'Processing user update...' %>"
   data-sending-user-information="<%= req.translations.sendingUserInformation || 'Sending user information...' %>"

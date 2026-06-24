@@ -8,7 +8,7 @@
     <div id="page-content" class="flex-1 p-6 overflow-y-auto pt-16">
       <div class="sm:flex sm:items-center px-8 pt-4">
         <div class="sm:flex-auto">
-          <h1 class="text-base font-medium leading-6 text-neutral-800 dark:text-white"><%= req.translations.adminCreateUserTitle %></h1>
+          <h1 class="text-base font-medium leading-6 text-neutral-800 dark:text-white"><%= req.translations.adminCreateUserTitle || 'Create User' %></h1>
           <p class="mt-1 tracking-tight text-sm text-neutral-500"><%= req.translations.adminCreateUserText || 'Every great panel needs people. Let\'s add one.' %></p>
         </div>
       </div>
@@ -18,12 +18,17 @@
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
 
             <div>
-              <label for="userEmail" class="block text-neutral-700 dark:text-neutral-400 text-sm font-medium mb-2"><%= req.translations.email %>:</label>
-              <input id="userEmail" type="email" class="rounded-xl text-neutral-800 dark:text-white text-sm w-full px-4 py-2 bg-neutral-400/10 dark:bg-neutral-600/20 placeholder:text-neutral-950/50 dark:placeholder:text-white/20 border border-neutral-800/10 dark:border-white/5 focus:outline-none focus:ring-1 focus:ring-neutral-300 dark:focus:ring-white/20" placeholder="example@domain.com">
+              <label for="userDiscordId" class="block text-neutral-700 dark:text-neutral-400 text-sm font-medium mb-2">Discord ID:</label>
+              <input id="userDiscordId" type="text" class="rounded-xl text-neutral-800 dark:text-white text-sm w-full px-4 py-2 bg-neutral-400/10 dark:bg-neutral-600/20 placeholder:text-neutral-950/50 dark:placeholder:text-white/20 border border-neutral-800/10 dark:border-white/5 focus:outline-none focus:ring-1 focus:ring-neutral-300 dark:focus:ring-white/20" placeholder="e.g. 176238128938192">
+              <div id="discordid-criteria" class="mt-2 space-y-1">
+                <p id="crit-discordid-numeric" class="text-xs text-neutral-400">
+                  <span class="crit-icon">—</span> Must be a numeric string
+                </p>
+              </div>
             </div>
 
             <div>
-              <label for="userUsername" class="block text-neutral-700 dark:text-neutral-400 text-sm font-medium mb-2"><%= req.translations.username %>:</label>
+              <label for="userUsername" class="block text-neutral-700 dark:text-neutral-400 text-sm font-medium mb-2"><%= req.translations.username || 'Username' %>:</label>
               <input id="userUsername" type="text" class="rounded-xl text-neutral-800 dark:text-white text-sm w-full px-4 py-2 bg-neutral-400/10 dark:bg-neutral-600/20 placeholder:text-neutral-950/50 dark:placeholder:text-white/20 border border-neutral-800/10 dark:border-white/5 focus:outline-none focus:ring-1 focus:ring-neutral-300 dark:focus:ring-white/20" placeholder="username">
               <div id="username-criteria" class="mt-2 space-y-1">
                 <p id="crit-username-length" class="text-xs text-neutral-400">
@@ -35,24 +40,8 @@
               </div>
             </div>
 
-            <div class="sm:col-span-2">
-              <label for="userPassword" class="block text-neutral-700 dark:text-neutral-400 text-sm font-medium mb-2"><%= req.translations.password %>:</label>
-              <input id="userPassword" type="password" class="rounded-xl text-neutral-800 dark:text-white text-sm w-full px-4 py-2 bg-neutral-400/10 dark:bg-neutral-600/20 placeholder:text-neutral-950/50 dark:placeholder:text-white/20 border border-neutral-800/10 dark:border-white/5 focus:outline-none focus:ring-1 focus:ring-neutral-300 dark:focus:ring-white/20" placeholder="********">
-              <div id="password-criteria" class="mt-2 space-y-1">
-                <p id="crit-length" class="text-xs text-neutral-400">
-                  <span class="crit-icon">—</span> At least 8 characters
-                </p>
-                <p id="crit-letter" class="text-xs text-neutral-400">
-                  <span class="crit-icon">—</span> At least one letter
-                </p>
-                <p id="crit-number" class="text-xs text-neutral-400">
-                  <span class="crit-icon">—</span> At least one number
-                </p>
-              </div>
-            </div>
-
             <div>
-              <label class="block text-neutral-700 dark:text-neutral-400 text-sm font-medium mb-2"><%= req.translations.admin %>:</label>
+              <label class="block text-neutral-700 dark:text-neutral-400 text-sm font-medium mb-2"><%= req.translations.admin || 'Admin' %>:</label>
               <div class="flex items-center mt-1">
                 <label class="relative inline-block w-12 h-6">
                   <input type="checkbox" id="userIsAdminSwitch" class="sr-only peer">

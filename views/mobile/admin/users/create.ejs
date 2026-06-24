@@ -5,19 +5,22 @@
 
   <div class="px-4 py-5">
     <div class="mb-5">
-      <h1 class="text-base font-medium text-neutral-800 dark:text-white"><%= req.translations.adminCreateUserTitle %></h1>
+      <h1 class="text-base font-medium text-neutral-800 dark:text-white"><%= req.translations.adminCreateUserTitle || 'Create User' %></h1>
       <p class="text-xs text-neutral-500 mt-0.5"><%= req.translations.adminCreateUserText || 'Every great panel needs people. Let\'s add one.' %></p>
     </div>
 
     <div class="rounded-xl bg-neutral-50 dark:bg-neutral-800/20 border border-neutral-200 dark:border-white/5 p-4 space-y-4">
 
       <div>
-        <label for="userEmail" class="block text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-1.5"><%= req.translations.email %>:</label>
-        <input id="userEmail" type="email" class="w-full rounded-xl bg-neutral-100 dark:bg-neutral-700/20 border border-neutral-200 dark:border-white/5 px-3 py-2.5 text-sm text-neutral-800 dark:text-white placeholder-neutral-400 focus:outline-none focus:ring-1 focus:ring-neutral-300 dark:focus:ring-white/20" placeholder="example@domain.com">
+        <label for="userDiscordId" class="block text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-1.5">Discord ID:</label>
+        <input id="userDiscordId" type="text" class="w-full rounded-xl bg-neutral-100 dark:bg-neutral-700/20 border border-neutral-200 dark:border-white/5 px-3 py-2.5 text-sm text-neutral-800 dark:text-white placeholder-neutral-400 focus:outline-none focus:ring-1 focus:ring-neutral-300 dark:focus:ring-white/20" placeholder="e.g. 176238128938192">
+        <div class="mt-2 space-y-1">
+          <p id="crit-discordid-numeric" class="text-xs text-neutral-400"><span class="crit-icon">—</span> Must be a numeric string</p>
+        </div>
       </div>
 
       <div>
-        <label for="userUsername" class="block text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-1.5"><%= req.translations.username %>:</label>
+        <label for="userUsername" class="block text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-1.5"><%= req.translations.username || 'Username' %>:</label>
         <input id="userUsername" type="text" class="w-full rounded-xl bg-neutral-100 dark:bg-neutral-700/20 border border-neutral-200 dark:border-white/5 px-3 py-2.5 text-sm text-neutral-800 dark:text-white placeholder-neutral-400 focus:outline-none focus:ring-1 focus:ring-neutral-300 dark:focus:ring-white/20" placeholder="username">
         <div class="mt-2 space-y-1">
           <p id="crit-username-length" class="text-xs text-neutral-400"><span class="crit-icon">—</span> 3–20 characters</p>
@@ -26,17 +29,7 @@
       </div>
 
       <div>
-        <label for="userPassword" class="block text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-1.5"><%= req.translations.password %>:</label>
-        <input id="userPassword" type="password" class="w-full rounded-xl bg-neutral-100 dark:bg-neutral-700/20 border border-neutral-200 dark:border-white/5 px-3 py-2.5 text-sm text-neutral-800 dark:text-white placeholder-neutral-400 focus:outline-none focus:ring-1 focus:ring-neutral-300 dark:focus:ring-white/20" placeholder="********">
-        <div class="mt-2 space-y-1">
-          <p id="crit-length" class="text-xs text-neutral-400"><span class="crit-icon">—</span> At least 8 characters</p>
-          <p id="crit-letter" class="text-xs text-neutral-400"><span class="crit-icon">—</span> At least one letter</p>
-          <p id="crit-number" class="text-xs text-neutral-400"><span class="crit-icon">—</span> At least one number</p>
-        </div>
-      </div>
-
-      <div>
-        <label class="block text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-2"><%= req.translations.admin %>:</label>
+        <label class="block text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-2"><%= req.translations.admin || 'Admin' %>:</label>
         <label class="flex items-center gap-3 cursor-pointer">
           <div class="relative inline-flex items-center">
             <input type="checkbox" id="userIsAdminSwitch" class="sr-only peer">
@@ -60,7 +53,7 @@
 
 <script nonce="<%- nonce %>">
   const usernameInput = document.getElementById('userUsername');
-  const passwordInput = document.getElementById('userPassword');
+  const discordIdInput = document.getElementById('userDiscordId');
 
   function setCrit(id, passing) {
     const el = document.getElementById(id);
@@ -94,28 +87,23 @@
     return lengthOk && charsOk;
   }
 
-  function checkPassword() {
-    const val = passwordInput.value;
-    if (!val) { resetCrit('crit-length'); resetCrit('crit-letter'); resetCrit('crit-number'); return false; }
-    const lengthOk = val.length >= 8;
-    const letterOk = /[A-Za-z]/.test(val);
-    const numberOk = /\d/.test(val);
-    setCrit('crit-length', lengthOk);
-    setCrit('crit-letter', letterOk);
-    setCrit('crit-number', numberOk);
-    return lengthOk && letterOk && numberOk;
+  function checkDiscordId() {
+    const val = discordIdInput.value;
+    if (!val) { resetCrit('crit-discordid-numeric'); return false; }
+    const numericOk = /^\d+$/.test(val.trim());
+    setCrit('crit-discordid-numeric', numericOk);
+    return numericOk;
   }
 
   usernameInput.addEventListener('input', checkUsername);
-  passwordInput.addEventListener('input', checkPassword);
+  discordIdInput.addEventListener('input', checkDiscordId);
 
   document.getElementById('createuserBtn').addEventListener('click', async () => {
-    const emailVal = document.getElementById('userEmail').value.trim();
+    const discordIdVal = discordIdInput.value.trim();
     const usernameVal = usernameInput.value.trim();
-    const passwordVal = passwordInput.value;
     const isAdmin = document.getElementById('userIsAdminSwitch').checked;
 
-    if (!emailVal || !usernameVal || !passwordVal) {
+    if (!discordIdVal || !usernameVal) {
       showToast('Please fill in all required fields.', 'error');
       return;
     }
@@ -123,8 +111,8 @@
       showToast('Username must be 3–20 characters, letters and numbers only.', 'error');
       return;
     }
-    if (!checkPassword()) {
-      showToast('Password must be at least 8 characters with a letter and number.', 'error');
+    if (!checkDiscordId()) {
+      showToast('Discord ID must be a numeric string.', 'error');
       return;
     }
 
@@ -135,7 +123,7 @@
       const response = await fetch('/admin/users/create-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailVal, username: usernameVal, password: passwordVal, isAdmin }),
+        body: JSON.stringify({ discordId: discordIdVal, username: usernameVal, isAdmin }),
       });
 
       if (response.ok) {

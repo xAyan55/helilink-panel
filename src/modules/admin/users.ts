@@ -4,7 +4,6 @@ import prisma from '../../db';
 import { isAuthenticated } from '../../handlers/utils/auth/authUtil';
 import { onlineUsers } from '../user/wsUsers';
 import logger from '../../handlers/logger';
-import bcrypt from 'bcryptjs';
 import { getParamAsNumber } from '../../utils/typeHelpers';
 
 
@@ -92,25 +91,27 @@ const adminModule: Module = {
       '/admin/users/create-user',
       isAuthenticated(true),
       async (req: Request, res: Response) => {
-        const { email, username, password, isAdmin } = req.body;
+        const { discordId, username, isAdmin } = req.body;
 
-        if (!email || !username || !password) {
+        if (!discordId || !username) {
           res.status(400).json({
-            message: 'Missing required fields: email, username, or password.',
+            message: 'Missing required fields: Discord ID and username.',
           });
           return;
         }
+
+        if (!/^\d+$/.test(String(discordId).trim())) {
+          res.status(400).json({
+            message: 'Discord ID must be a numeric string.',
+          });
+          return;
+        }
+
+        const cleanDiscordId = String(discordId).trim();
 
         if (!/^[a-zA-Z0-9]{3,20}$/.test(username)) {
           res.status(400).json({
             message: 'Username must be 3–20 characters and contain only letters and numbers.',
-          });
-          return;
-        }
-
-        if (password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password)) {
-          res.status(400).json({
-            message: 'Password must be at least 8 characters and contain at least one letter and one number.',
           });
           return;
         }
@@ -120,22 +121,25 @@ const adminModule: Module = {
         try {
           const existingUser = await prisma.users.findFirst({
             where: {
-              OR: [{ email }, { username }],
+              OR: [{ discord_id: cleanDiscordId }, { username }],
             },
           });
 
           if (existingUser) {
-            res
-              .status(400)
-              .json({ message: 'Email or username already exists.' });
+            if (existingUser.discord_id === cleanDiscordId) {
+              res.status(400).json({ message: 'Discord ID already exists.' });
+            } else {
+              res.status(400).json({ message: 'Username already exists.' });
+            }
             return;
           }
 
           await prisma.users.create({
             data: {
-              email,
+              email: `${username}@discord.local`,
               username,
-              password: await bcrypt.hash(password, 12),
+              password: null,
+              discord_id: cleanDiscordId,
               isAdmin: isAdminBool,
             },
           });
@@ -269,24 +273,38 @@ const adminModule: Module = {
             return;
           }
 
-          const { email, username, description, isAdmin, password, serverLimit, maxMemory, maxCpu, maxStorage } = req.body;
+          const { discordId, username, description, isAdmin, serverLimit, maxMemory, maxCpu, maxStorage } = req.body;
 
-          // Check if email or username is already taken by another user
-          if (email && email !== targetUser.email) {
-            const existingUserWithEmail = await prisma.users.findFirst({
+          if (discordId !== undefined) {
+            const cleanDiscordId = String(discordId).trim();
+            if (cleanDiscordId === '') {
+              res.status(400).json({ error: 'Discord ID cannot be empty.' });
+              return;
+            }
+            if (!/^\d+$/.test(cleanDiscordId)) {
+              res.status(400).json({ error: 'Discord ID must be a numeric string.' });
+              return;
+            }
+
+            const existingUserWithDiscordId = await prisma.users.findFirst({
               where: {
-                email,
+                discord_id: cleanDiscordId,
                 id: { not: targetUserId }
               },
             });
 
-            if (existingUserWithEmail) {
-              res.status(400).json({ error: 'Email already in use' });
+            if (existingUserWithDiscordId) {
+              res.status(400).json({ error: 'Discord ID already in use' });
               return;
             }
           }
 
-          if (username && username !== targetUser.username) {
+          if (username) {
+            if (!/^[a-zA-Z0-9]{3,20}$/.test(username)) {
+              res.status(400).json({ error: 'Username must be 3–20 characters and contain only letters and numbers.' });
+              return;
+            }
+
             const existingUserWithUsername = await prisma.users.findFirst({
               where: {
                 username,
@@ -303,9 +321,16 @@ const adminModule: Module = {
           // Prepare update data
           const updateData: any = {};
 
-          if (email) updateData.email = email;
-          if (username) updateData.username = username;
-          if (description) updateData.description = description;
+          if (discordId !== undefined) {
+            updateData.discord_id = String(discordId).trim();
+          }
+          if (username) {
+            updateData.username = username;
+            if (!targetUser.discord_email) {
+              updateData.email = `${username}@discord.local`;
+            }
+          }
+          if (description !== undefined) updateData.description = description;
 
           // Handle isAdmin field (convert to boolean)
           if (isAdmin !== undefined) {
@@ -324,11 +349,6 @@ const adminModule: Module = {
           }
           if (maxStorage !== undefined) {
             updateData.maxStorage = maxStorage === '' || maxStorage === null ? null : parseInt(maxStorage, 10);
-          }
-
-          // Handle password update if provided
-          if (password && password.trim() !== '') {
-            updateData.password = await bcrypt.hash(password, 12);
           }
 
           // Update user

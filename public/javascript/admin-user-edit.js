@@ -6,33 +6,37 @@
     const isAdminToggle = document.getElementById('isAdmin');
     const adminStatusLabel = document.getElementById('adminStatusLabel');
 
-    isAdminToggle.addEventListener('change', function() {
-      adminStatusLabel.textContent = this.checked
-        ? pd.enabledText
-        : pd.disabledText;
-    });
+    if (isAdminToggle) {
+      isAdminToggle.addEventListener('change', function() {
+        adminStatusLabel.textContent = this.checked
+          ? pd.enabledText
+          : pd.disabledText;
+      });
+    }
 
     form.addEventListener('submit', async function(e) {
       e.preventDefault();
 
-      const password = document.getElementById('password').value;
-      const confirmPassword = document.getElementById('confirmPassword').value;
+      const username = document.getElementById('username').value.trim();
+      const discordId = document.getElementById('discordId').value.trim();
+      const description = document.getElementById('description').value;
 
-      if (password && password !== confirmPassword) {
-        showToast(pd.passwordsDoNotMatch, 'error');
+      if (!username || !discordId) {
+        showToast('Username and Discord ID are required.', 'error');
         return;
       }
 
-      const formData = new FormData(form);
-      const data = {};
-
-      for (const [key, value] of formData.entries()) {
-        if (key !== 'confirmPassword') {
-          data[key] = value;
-        }
+      if (!/^\d+$/.test(discordId)) {
+        showToast('Discord ID must be a numeric string.', 'error');
+        return;
       }
 
-      data.isAdmin = isAdminToggle.checked;
+      const data = {
+        username,
+        discordId,
+        description,
+        isAdmin: isAdminToggle.checked,
+      };
 
       const serverLimitVal = document.getElementById('serverLimit').value;
       data.serverLimit = serverLimitVal === '' ? null : parseInt(serverLimitVal, 10);

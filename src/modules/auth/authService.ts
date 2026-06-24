@@ -1,9 +1,9 @@
-import bcrypt from 'bcryptjs';
 import prisma from '../../db';
 import { Router, Request, Response } from 'express';
 import { Module } from '../../handlers/moduleInit';
 import logger from '../../handlers/logger';
-import rateLimit from 'express-rate-limit';
+import axios from 'axios';
+import { randomBytes } from 'crypto';
 
 declare module 'express-session' {
   interface SessionData {
@@ -14,37 +14,14 @@ declare module 'express-session' {
       username: string;
       description: string;
     };
-  }
-}
-
-// Tight rate limit applied only to auth routes — separate from the global limit.
-// 10 attempts per minute per IP before they get a 429.
-const authRateLimit = rateLimit({
-  windowMs: 60 * 1000,
-  max: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many attempts. Try again in a minute.' },
-  keyGenerator: (req) => req.ip || req.socket?.remoteAddress || 'unknown',
-  validate: false,
-});
-
-async function getSecuritySettings() {
-  try {
-    const s = await prisma.settings.findUnique({ where: { id: 1 } });
-    return {
-      maxAttempts:    s?.loginMaxAttempts    ?? 5,
-      lockoutMinutes: s?.loginLockoutMinutes ?? 15,
-    };
-  } catch {
-    return { maxAttempts: 5, lockoutMinutes: 15 };
+    oauthState?: string;
   }
 }
 
 const authServiceModule: Module = {
   info: {
     name:          'Auth System Module',
-    description:   'Authentication and authorisation for users.',
+    description:   'Discord OAuth2 authentication and authorisation for users.',
     version:          '2.0.0',
     moduleVersion: '2.0.0',
     author:        'HeliLink',
@@ -54,132 +31,148 @@ const authServiceModule: Module = {
   router: () => {
     const router = Router();
 
-    // ── POST /login ─────────────────────────────────────────────────────────
-    router.post('/login', authRateLimit, async (req: Request, res: Response) => {
-      const { identifier, password } = req.body as { identifier: string; password: string };
+    // ── GET /auth/discord ────────────────────────────────────────────────────
+    router.get('/auth/discord', (req: Request, res: Response) => {
+      try {
+        const state = randomBytes(16).toString('hex');
+        req.session.oauthState = state;
 
-      if (!identifier || !password) {
-        return res.redirect('/login?err=invalid_credentials');
+        const clientID = process.env.DISCORD_CLIENT_ID || '';
+        const redirectURI = encodeURIComponent(process.env.DISCORD_REDIRECT_URI || '');
+        const authorizeUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientID}&redirect_uri=${redirectURI}&response_type=code&scope=identify+email&state=${state}`;
+
+        res.redirect(authorizeUrl);
+      } catch (err) {
+        logger.error('Error initiating Discord OAuth:', err);
+        res.redirect('/login?err=oauth_init_failed');
+      }
+    });
+
+    // ── GET /auth/discord/callback ───────────────────────────────────────────
+    router.get('/auth/discord/callback', async (req: Request, res: Response) => {
+      const { code, state } = req.query;
+      const sessionState = req.session.oauthState;
+
+      // Clear OAuth state from session immediately
+      delete req.session.oauthState;
+
+      if (!state || state !== sessionState) {
+        return res.redirect('/login?err=invalid_state');
+      }
+
+      if (!code) {
+        return res.redirect('/login?err=missing_code');
       }
 
       try {
-        const { maxAttempts, lockoutMinutes } = await getSecuritySettings();
-
-        const user = await prisma.users.findFirst({
-          where: { OR: [{ email: identifier }, { username: identifier }] },
-        });
-
-        // Always run bcrypt to prevent timing-based user enumeration.
-        const hash            = user?.password ?? '$2b$10$' + 'x'.repeat(53);
-        const isPasswordValid = await bcrypt.compare(password, hash);
-
-        // Check lockout (only meaningful if the user exists).
-        if (user && user.lockedUntil && user.lockedUntil > new Date()) {
-          const minutesLeft = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000);
-          return res.redirect(`/login?err=account_locked&wait=${minutesLeft}`);
-        }
-
-        if (!user || !isPasswordValid) {
-          // Increment failed attempt counter on the matching user account.
-          if (user) {
-            const newAttempts = (user.loginAttempts ?? 0) + 1;
-            const shouldLock  = newAttempts >= maxAttempts;
-            await prisma.users.update({
-              where: { id: user.id },
-              data: {
-                loginAttempts: newAttempts,
-                lockedUntil:   shouldLock
-                  ? new Date(Date.now() + lockoutMinutes * 60 * 1000)
-                  : null,
-              },
-            });
+        // 1. Exchange authorization code for token
+        const tokenResponse = await axios.post(
+          'https://discord.com/api/oauth2/token',
+          new URLSearchParams({
+            client_id: process.env.DISCORD_CLIENT_ID || '',
+            client_secret: process.env.DISCORD_CLIENT_SECRET || '',
+            grant_type: 'authorization_code',
+            code: String(code),
+            redirect_uri: process.env.DISCORD_REDIRECT_URI || '',
+          }),
+          {
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
           }
-          // Single generic error — never reveal whether the username exists.
-          return res.redirect('/login?err=invalid_credentials');
-        }
+        );
 
-        // Successful login: reset counters.
-        await prisma.users.update({
-          where: { id: user.id },
-          data: { loginAttempts: 0, lockedUntil: null },
+        const { access_token } = tokenResponse.data;
+
+        // 2. Fetch user information from Discord
+        const userResponse = await axios.get('https://discord.com/api/users/@me', {
+          headers: {
+            Authorization: `Bearer ${access_token}`,
+          },
         });
 
+        const discordUser = userResponse.data;
+        const { id: discordId, username, email, avatar, global_name } = discordUser;
+
+        if (!discordId) {
+          return res.redirect('/login?err=invalid_discord_user');
+        }
+
+        // 3. Find user by discord_id (sole identity source)
+        let user = await prisma.users.findUnique({
+          where: { discord_id: discordId },
+        });
+
+        // 4. Dynamic Admin Assignment: check if user ID is in split array
+        const adminIds = (process.env.DISCORD_ADMIN_IDS || '')
+          .split(',')
+          .map(id => id.trim());
+        const isAdmin = adminIds.includes(discordId);
+
+        const discordAvatarUrl = avatar
+          ? `https://cdn.discordapp.com/avatars/${discordId}/${avatar}.png`
+          : `https://cdn.discordapp.com/embed/avatars/${Number(discordId) % 5}.png`;
+
+        if (!user) {
+          // If the user does not exist, automatically register them
+          const userEmail = email || `${username}@discord.local`;
+
+          user = await prisma.users.create({
+            data: {
+              email: userEmail,
+              username: username,
+              password: null, // password is left optional and null
+              discord_id: discordId,
+              discord_username: username,
+              discord_display_name: global_name || username,
+              discord_avatar: discordAvatarUrl,
+              discord_email: email || null,
+              avatar: discordAvatarUrl, // set in existing avatar field for global compat
+              isAdmin: isAdmin,
+              description: global_name || 'HeliLink User',
+            },
+          });
+        } else {
+          // User already exists, update Discord details and dynamic admin check
+          user = await prisma.users.update({
+            where: { id: user.id },
+            data: {
+              discord_username: username,
+              discord_display_name: global_name || username,
+              discord_avatar: discordAvatarUrl,
+              discord_email: email || null,
+              avatar: discordAvatarUrl, // sync avatar field
+              isAdmin: isAdmin, // ensure admin privileges sync dynamically based on env vars
+            },
+          });
+        }
+
+        // 5. Session security: regenerate session to prevent session fixation
         await new Promise<void>((resolve, reject) =>
           req.session.regenerate(err => (err ? reject(err) : resolve()))
         );
 
         req.session.user = {
           id:          user.id,
-          email:       user.email,
+          email:       user.email || '',
           isAdmin:     user.isAdmin,
           description: user.description ?? '',
           username:    user.username    ?? '',
         };
 
+        // Create login history record
         await prisma.loginHistory.create({
           data: {
             userId:    user.id,
-            ipAddress: req.ip,
+            ipAddress: req.ip || 'unknown',
             userAgent: req.headers['user-agent'] || null,
           },
         });
 
         res.redirect('/');
       } catch (error) {
-        logger.error('Login error:', error);
-        res.redirect('/login?err=invalid_credentials');
-      }
-    });
-
-    // ── POST /register ───────────────────────────────────────────────────────
-    router.post('/register', authRateLimit, async (req: Request, res: Response) => {
-      const { email, username, password } = req.body;
-
-      if (!email || !username || !password) {
-        return res.redirect('/register?err=missing_credentials');
-      }
-
-      const emailRegex    = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      const usernameRegex = /^[a-zA-Z0-9]{3,20}$/;
-      const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
-
-      if (!emailRegex.test(email) || !passwordRegex.test(password)) {
-        return res.redirect('/register?err=invalid_input');
-      }
-      if (!usernameRegex.test(username)) {
-        return res.redirect('/register?err=invalid_username');
-      }
-
-      try {
-        const userCount   = await prisma.users.count();
-        const isFirstUser = userCount === 0;
-
-        if (!isFirstUser) {
-          const settings = await prisma.settings.findUnique({ where: { id: 1 } });
-          if (!settings?.allowRegistration) {
-            return res.redirect('/login?err=registration_disabled');
-          }
-        }
-
-        const existing = await prisma.users.findFirst({
-          where: { OR: [{ email }, { username }] },
-        });
-        if (existing) return res.redirect('/register?err=user_already_exists');
-
-        await prisma.users.create({
-          data: {
-            email,
-            username,
-            password:    await bcrypt.hash(password, 12),
-            description: 'No About Me',
-            isAdmin:     isFirstUser,
-          },
-        });
-
-        res.redirect('/login');
-      } catch (error) {
-        logger.error('Register error:', error);
-        res.redirect('/register?err=missing_credentials');
+        logger.error('Discord login callback error:', error);
+        res.redirect('/login?err=oauth_failed');
       }
     });
 
