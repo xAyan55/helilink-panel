@@ -43,7 +43,7 @@ const userCreateServerModule: Module = {
     description: 'Allows users to create their own servers within admin-defined limits.',
     version: '2.0.0',
     moduleVersion: '1.0.0',
-    author: 'AirlinkLab',
+    author:        'HeliLink',
     license: 'MIT',
   },
 

@@ -20,7 +20,7 @@ const adminModule: Module = {
     description: 'This file provides player statistics for the admin panel.',
     version: '2.0.0',
     moduleVersion: '1.0.0',
-    author: 'AirLinkLab',
+    author:        'HeliLink',
     license: 'MIT',
   },
 

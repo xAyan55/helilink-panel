@@ -21,7 +21,7 @@ const adminModule: Module = {
     description: 'This file is for admin functionality.',
     version: '2.0.0',
     moduleVersion: '1.0.0',
-    author: 'AirLinkLab',
+    author:        'HeliLink',
     license: 'MIT',
   },
 

@@ -21,7 +21,7 @@ const airlinkCloudModule: Module = {
     description: 'HeliLink Cloud integration settings.',
     version: '2.0.0',
     moduleVersion: '1.0.0',
-    author: 'AirlinkLab',
+    author:        'HeliLink',
     license: 'MIT',
   },
 

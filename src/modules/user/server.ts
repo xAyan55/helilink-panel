@@ -296,7 +296,7 @@ const dashboardModule: Module = {
     description: 'This file is for dashboard functionality.',
     version: '2.0.0',
     moduleVersion: '1.0.0',
-    author: 'AirLinkLab',
+    author:        'HeliLink',
     license: 'MIT',
   },
 
@@ -2712,7 +2712,7 @@ const dashboardModule: Module = {
                   responseType: 'stream',
                 });
 
-                // Upload to Airlink Cloud
+                // Upload to HeliLink Cloud
                 const uniqueCloudFileName = `${getParamAsString(serverId)}_${response.data.backup.uuid}_${Date.now()}.tar.gz`;
                 const uploadResult = await cloudClient.uploadFile(
                   downloadResponse.data,
@@ -2734,7 +2734,7 @@ const dashboardModule: Module = {
                   filePath = 'airlink-cloud'; // Marker for cloud backups
                 }
               } catch (cloudError) {
-                logger.error('Failed to redirect backup to Airlink Cloud:', cloudError);
+                logger.error('Failed to redirect backup to HeliLink Cloud:', cloudError);
                 // We'll keep the local backup if cloud upload fails
               }
             }
@@ -2818,7 +2818,7 @@ const dashboardModule: Module = {
           if (backup.airlinkCloudId) {
             const settings = await prisma.settings.findUnique({ where: { id: 1 } });
             if (!settings?.airlinkCloudApiKey) {
-              res.status(500).json({ error: 'Airlink Cloud API key not configured' });
+              res.status(500).json({ error: 'HeliLink Cloud API key not configured' });
               return;
             }
 
@@ -2852,7 +2852,7 @@ const dashboardModule: Module = {
                 throw new Error('Failed to upload cloud backup to daemon');
               }
             } catch (err) {
-              logger.error('Failed to prepare Airlink Cloud backup for restore:', err);
+              logger.error('Failed to prepare HeliLink Cloud backup for restore:', err);
               res.status(500).json({ error: 'Failed to prepare cloud backup for restore' });
               return;
             }
@@ -2944,7 +2944,7 @@ const dashboardModule: Module = {
           if (backup.airlinkCloudId) {
             const settings = await prisma.settings.findUnique({ where: { id: 1 } });
             if (!settings?.airlinkCloudApiKey) {
-              res.status(500).json({ error: 'Airlink Cloud API key not configured' });
+              res.status(500).json({ error: 'HeliLink Cloud API key not configured' });
               return;
             }
 

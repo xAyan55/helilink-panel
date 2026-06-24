@@ -1,7 +1,7 @@
 {
   "name": "Modrinth store",
   "version": "2.0.0",
-  "description": "Modrinth store for AirLink - Browse, search, and install mods, modpacks, plugins, shaders, and more",
+  "description": "Modrinth store for HeliLink - Browse, search, and install mods, modpacks, plugins, shaders, and more",
   "author": "g-flame (https://github.com/g-flame)",
   "main": "dist/index.js",
   "router": "/modrinth",

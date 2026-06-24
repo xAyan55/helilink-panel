@@ -47,7 +47,7 @@ const authServiceModule: Module = {
     description:   'Authentication and authorisation for users.',
     version:          '2.0.0',
     moduleVersion: '2.0.0',
-    author:        'AirlinkLab',
+    author:        'HeliLink',
     license:       'MIT',
   },
 

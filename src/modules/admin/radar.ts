@@ -48,7 +48,7 @@ const radarModule: Module = {
     description: 'This module provides radar scanning functionality for server volumes.',
     version: '2.0.0',
     moduleVersion: '1.0.0',
-    author: 'AirLinkLab',
+    author:        'HeliLink',
     license: 'MIT',
   },
 

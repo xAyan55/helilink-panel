@@ -14,7 +14,7 @@ const wsUsersModule: Module = {
     description: 'This file is for the users functionality.',
     version: '2.0.0',
     moduleVersion: '1.0.0',
-    author: 'AirLinkLab',
+    author:        'HeliLink',
     license: 'MIT',
   },
 

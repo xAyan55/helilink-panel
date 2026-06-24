@@ -10,7 +10,7 @@ const adminMenuModule: Module = {
     description: 'Admin menu route.',
     version: '2.0.0',
     moduleVersion: '1.0.0',
-    author: 'AirLinkLab',
+    author:        'HeliLink',
     license: 'MIT',
   },
 

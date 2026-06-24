@@ -140,7 +140,7 @@ const adminModule: Module = {
     description:   'Settings management for the admin panel.',
     version:       '2.0.0',
     moduleVersion: '2.0.0',
-    author:        'AirlinkLab',
+    author:        'HeliLink',
     license:       'MIT',
   },
 
