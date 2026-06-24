@@ -1,5 +1,5 @@
 import prisma from '../../db';
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { Module } from '../../handlers/moduleInit';
 import logger from '../../handlers/logger';
 import axios from 'axios';
@@ -32,10 +32,14 @@ const authServiceModule: Module = {
     const router = Router();
 
     // ── GET /auth/discord ────────────────────────────────────────────────────
-    router.get('/auth/discord', (req: Request, res: Response) => {
+    router.get('/auth/discord', (req: Request, res: Response, next: NextFunction) => {
       try {
         const state = randomBytes(16).toString('hex');
         req.session.discordOAuthState = state;
+
+        console.log('OAUTH REDIRECT');
+        console.log('SESSION ID', req.sessionID);
+        console.log('STATE', state);
 
         logger.info(`[OAuth Debug] Generated OAuth state: ${state}`);
         logger.info(`[OAuth Debug] Session ID before redirect: ${req.sessionID}`);
@@ -48,13 +52,13 @@ const authServiceModule: Module = {
         req.session.save((err) => {
           if (err) {
             logger.error('Error saving session before OAuth redirect:', err);
-            return res.redirect('/login?err=oauth_init_failed');
+            return next(err);
           }
           res.redirect(authorizeUrl);
         });
       } catch (err) {
         logger.error('Error initiating Discord OAuth:', err);
-        res.redirect('/login?err=oauth_init_failed');
+        return next(err);
       }
     });
 
@@ -62,6 +66,11 @@ const authServiceModule: Module = {
     router.get('/auth/discord/callback', async (req: Request, res: Response) => {
       const { code, state } = req.query;
       const sessionState = req.session.discordOAuthState;
+
+      console.log('OAUTH CALLBACK');
+      console.log('SESSION ID', req.sessionID);
+      console.log('STORED STATE', req.session.discordOAuthState);
+      console.log('RECEIVED STATE', req.query.state);
 
       logger.info(`[OAuth Debug] Callback state received: ${state}`);
       logger.info(`[OAuth Debug] Session ID during callback: ${req.sessionID}`);
