@@ -90,7 +90,19 @@
 <%- include('../../components/toast') %>
 
 <script nonce="<%- nonce %>">
-  let allocatedPorts = <%= node.allocatedPorts ? node.allocatedPorts : '[]' %>;
+  let rawPorts = <%- node.allocatedPorts ? node.allocatedPorts : '[]' %>;
+  let allocatedPorts = rawPorts.map(item => {
+    if (typeof item === 'number') {
+      return { port: item, alias: null };
+    }
+    if (item && typeof item === 'object' && typeof item.port === 'number') {
+      return {
+        port: item.port,
+        alias: typeof item.alias === 'string' ? item.alias : null
+      };
+    }
+    return null;
+  }).filter(item => item !== null);
 
   function getUsedPorts() {
     const usedPorts = new Set();
@@ -108,7 +120,8 @@
     return usedPorts;
   }
 
-  function buildPortTag(port, usedPorts) {
+  function buildPortTag(portObj, usedPorts) {
+    const port = portObj.port;
     const isUsed = usedPorts.has(port);
     const tag = document.createElement('div');
     tag.dataset.port = port;
@@ -119,12 +132,22 @@
     tag.style.transform = 'translateY(4px)';
 
     const label = document.createElement('span');
-    label.className = isUsed ? 'text-amber-600 dark:text-amber-400 flex items-center gap-1.5' : 'text-neutral-800 dark:text-neutral-300';
+    label.className = isUsed ? 'text-amber-600 dark:text-amber-400 flex items-center gap-1.5 shrink-0' : 'text-neutral-800 dark:text-neutral-300 shrink-0';
     if (isUsed) {
       label.innerHTML = `${port} <span class="text-xs bg-amber-600/20 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded">In use</span>`;
     } else {
       label.textContent = port;
     }
+
+    const aliasInput = document.createElement('input');
+    aliasInput.type = 'text';
+    aliasInput.placeholder = 'Alias';
+    aliasInput.maxLength = 50;
+    aliasInput.className = 'alias-input ml-2 rounded bg-neutral-200/50 dark:bg-neutral-800/50 text-xs px-1.5 py-0.5 border border-neutral-300 dark:border-neutral-700/50 w-20 focus:outline-none focus:ring-1 focus:ring-neutral-500';
+    aliasInput.value = portObj.alias || '';
+    aliasInput.oninput = (e) => {
+      portObj.alias = e.target.value;
+    };
 
     const del = document.createElement('button');
     del.type = 'button';
@@ -136,6 +159,7 @@
     }
 
     tag.appendChild(label);
+    tag.appendChild(aliasInput);
     tag.appendChild(del);
     return tag;
   }
@@ -169,8 +193,8 @@
       return;
     }
     const usedPorts = getUsedPorts();
-    allocatedPorts.forEach((port, i) => {
-      const tag = buildPortTag(port, usedPorts);
+    allocatedPorts.forEach((portObj, i) => {
+      const tag = buildPortTag(portObj, usedPorts);
       portsList.appendChild(tag);
       if (animate) {
         setTimeout(() => animatePortIn(tag), i * 25);
@@ -189,7 +213,9 @@
         return;
       }
       for (let p = start; p <= end; p++) {
-        if (!allocatedPorts.includes(p)) allocatedPorts.push(p);
+        if (!allocatedPorts.some(x => x.port === p)) {
+          allocatedPorts.push({ port: p, alias: null });
+        }
       }
     } else {
       const port = parseInt(input.trim());
@@ -197,9 +223,11 @@
         showToast('Invalid port. Must be between 1024 and 65535.', 'error');
         return;
       }
-      if (!allocatedPorts.includes(port)) allocatedPorts.push(port);
+      if (!allocatedPorts.some(x => x.port === port)) {
+        allocatedPorts.push({ port: port, alias: null });
+      }
     }
-    allocatedPorts.sort((a, b) => a - b);
+    allocatedPorts.sort((a, b) => a.port - b.port);
     renderPortsList(true);
   }
 
@@ -209,7 +237,7 @@
       showToast('Cannot remove a port in use by a server.', 'error');
       return;
     }
-    allocatedPorts = allocatedPorts.filter(p => p !== port);
+    allocatedPorts = allocatedPorts.filter(p => p.port !== port);
     renderPortsList(false);
   }
 
