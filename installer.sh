@@ -20,6 +20,7 @@ set -uo pipefail
 readonly VERSION="3.2.0-Stable"
 readonly LOG="/tmp/airlink.log"
 readonly PANEL_REPO="https://github.com/xAyan55/helilink-panel.git"
+readonly DAEMON_REPO="https://github.com/xAyan55/helilink-daemon.git"
 readonly DAEMON_RELEASE_API="https://api.github.com/repos/xAyan55/helilink-daemon/releases/latest"
 
 PNPM_REGISTRY="https://registry.npmjs.org"
@@ -1142,28 +1143,31 @@ DAEMON_PLATFORM=""
 DAEMON_ARCH=""
 
 # =============================================================================
-# Daemon install — binary release
+# Daemon install — binary release (with source-build fallback)
 # =============================================================================
 phase_daemon_download() {
     detect_platform
 
-    echo "Fetching latest daemon release info..."
-    local release_json
-    release_json=$(curl -fsSL --max-time 30 "${DAEMON_RELEASE_API}" 2>/dev/null) \
-        || die "Failed to fetch daemon release info from GitHub"
+    mkdir -p /etc/daemon
 
-    # extract tag name for logging
-    local tag
-    tag=$(echo "$release_json" | python3 -c "
+    # ── Try pre-built release first ──────────────────────────────────────
+    echo "Fetching latest daemon release info..."
+    local release_json=""
+    release_json=$(curl -fsSL --max-time 30 "${DAEMON_RELEASE_API}" 2>/dev/null) || true
+
+    if [[ -n "$release_json" ]]; then
+        # extract tag name for logging
+        local tag
+        tag=$(echo "$release_json" | python3 -c "
 import json, sys
 d = json.load(sys.stdin)
 print(d.get('tag_name', 'unknown'))
 " 2>/dev/null) || tag="unknown"
-    log "Latest daemon release: $tag"
+        log "Latest daemon release: $tag"
 
-    # find the matching asset URL — name format: airlinkd-{platform}-{arch}-{version}.zip
-    local asset_url
-    asset_url=$(echo "$release_json" | python3 -c "
+        # find the matching asset URL — name format: airlinkd-{platform}-{arch}-{version}.zip
+        local asset_url
+        asset_url=$(echo "$release_json" | python3 -c "
 import json, sys
 platform = sys.argv[1]
 arch     = sys.argv[2]
@@ -1177,30 +1181,101 @@ for a in assets:
         break
 " "$DAEMON_PLATFORM" "$DAEMON_ARCH" 2>/dev/null) || true
 
-    [[ -z "$asset_url" ]] && die "No daemon binary found for ${DAEMON_PLATFORM}-${DAEMON_ARCH} in release ${tag}"
-    log "Downloading: $asset_url"
-    echo "Downloading HeliLink Daemon (airlinkd) ${tag} for ${DAEMON_PLATFORM}-${DAEMON_ARCH}..."
+        if [[ -n "$asset_url" ]]; then
+            log "Downloading: $asset_url"
+            echo "Downloading HeliLink Daemon (airlinkd) ${tag} for ${DAEMON_PLATFORM}-${DAEMON_ARCH}..."
 
-    local tmpdir; tmpdir=$(mktemp -d /tmp/al-daemon-XXXXXX)
-    local zipfile="${tmpdir}/airlinkd.zip"
+            local tmpdir; tmpdir=$(mktemp -d /tmp/al-daemon-XXXXXX)
+            local zipfile="${tmpdir}/airlinkd.zip"
 
-    curl -fsSL --max-time 120 --progress-bar -o "$zipfile" "$asset_url" \
-        || die "Failed to download daemon binary"
+            curl -fsSL --max-time 120 --progress-bar -o "$zipfile" "$asset_url" \
+                || die "Failed to download daemon binary"
 
-    echo "Extracting..."
-    unzip -o -q "$zipfile" -d "$tmpdir" \
-        || die "Failed to unzip daemon binary"
+            echo "Extracting..."
+            unzip -o -q "$zipfile" -d "$tmpdir" \
+                || die "Failed to unzip daemon binary"
 
-    # the binary inside is always named airlinkd
-    [[ -f "${tmpdir}/airlinkd" ]] \
-        || die "Binary 'airlinkd' not found inside zip (contents: $(ls "$tmpdir"))"
+            [[ -f "${tmpdir}/airlinkd" ]] \
+                || die "Binary 'airlinkd' not found inside zip (contents: $(ls "$tmpdir"))"
 
-    mkdir -p /etc/daemon
-    cp "${tmpdir}/airlinkd" /etc/daemon/airlinkd
+            cp "${tmpdir}/airlinkd" /etc/daemon/airlinkd
+            chmod +x /etc/daemon/airlinkd
+            rm -rf "$tmpdir"
+
+            log "OK: airlinkd binary installed to /etc/daemon/airlinkd (from release)"
+
+            # write .env if not already present
+            if [[ ! -f /etc/daemon/.env ]]; then
+                cat > /etc/daemon/.env <<ENVEOF
+remote=${PANEL_ADDRESS}
+key=${DAEMON_KEY}
+port=${DAEMON_PORT}
+DEBUG=false
+version=1.0.0
+environment=production
+STATS_INTERVAL=10000
+ENVEOF
+            fi
+            return 0
+        fi
+
+        log "WARN: No matching asset for ${DAEMON_PLATFORM}-${DAEMON_ARCH} in release ${tag}, falling back to source build"
+    else
+        log "WARN: No releases found on GitHub, falling back to source build"
+    fi
+
+    # ── Fallback: build from source ──────────────────────────────────────
+    echo "No pre-built binary available — building daemon from source..."
+
+    # install bun if not present
+    if ! command -v bun &>/dev/null; then
+        echo "Installing Bun runtime..."
+        curl -fsSL https://bun.sh/install | bash &>/dev/null \
+            || die "Failed to install Bun"
+        # source bun into current shell
+        export BUN_INSTALL="${HOME}/.bun"
+        export PATH="${BUN_INSTALL}/bin:${PATH}"
+        command -v bun &>/dev/null || die "Bun installed but not found in PATH"
+        log "Bun $(bun -v 2>/dev/null) installed"
+    else
+        log "Bun $(bun -v 2>/dev/null) already available"
+    fi
+
+    local tmpdir; tmpdir=$(mktemp -d /tmp/al-daemon-src-XXXXXX)
+
+    echo "Cloning daemon repository..."
+    git clone --depth 1 "${DAEMON_REPO}" "${tmpdir}/helilink-daemon" &>/dev/null \
+        || die "Failed to clone daemon repository"
+
+    cd "${tmpdir}/helilink-daemon"
+
+    echo "Installing dependencies..."
+    bun install --frozen-lockfile &>/dev/null \
+        || bun install &>/dev/null \
+        || die "Failed to install daemon dependencies"
+
+    echo "Compiling daemon binary (this may take a moment)..."
+    local bun_target="bun-${DAEMON_PLATFORM}-${DAEMON_ARCH}"
+    # map platform names to bun target format
+    case "$DAEMON_PLATFORM" in
+        macos) bun_target="bun-darwin-${DAEMON_ARCH}" ;;
+        *)     bun_target="bun-${DAEMON_PLATFORM}-${DAEMON_ARCH}" ;;
+    esac
+
+    mkdir -p dist
+    bun build --compile --target "$bun_target" --outfile dist/airlinkd src/app.ts \
+        || die "Failed to compile daemon binary"
+
+    [[ -f "dist/airlinkd" ]] \
+        || die "Compiled binary not found after build"
+
+    cp dist/airlinkd /etc/daemon/airlinkd
     chmod +x /etc/daemon/airlinkd
+
+    cd /
     rm -rf "$tmpdir"
 
-    log "OK: airlinkd binary installed to /etc/daemon/airlinkd"
+    log "OK: airlinkd binary installed to /etc/daemon/airlinkd (built from source)"
 
     # write .env if not already present
     if [[ ! -f /etc/daemon/.env ]]; then
